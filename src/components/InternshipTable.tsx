@@ -1,1220 +1,963 @@
-
 import React, { useState, useEffect } from 'react';
-import { format, parse } from 'date-fns';
-import * as XLSX from 'xlsx';
-import { Download, Edit, Trash2, Plus, File, Upload, Filter } from 'lucide-react';
+import { 
+  Table, 
+  TableHeader, 
+  TableRow, 
+  TableHead, 
+  TableBody, 
+  TableCell 
+} from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
+import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Card } from '@/components/ui/card';
-import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Calendar } from '@/components/ui/calendar';
+import { format } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar as CalendarIcon, Trash2, FileText, X, ArrowLeft, ArrowRight } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import { supabase, Internship, getInternships, addInternship, updateInternship, deleteInternship, uploadFile, addInternshipDynamicColumn, getInternshipDynamicColumns, addInternshipDynamicColumnValue, getInternshipDynamicColumnValues, formatDateForDisplay, parseDisplayDate } from '@/lib/supabase';
-
-// Programs and Faculty Coordinator options
-const programOptions = [
-  'BSc CS', 'BSc DS', 'BSc Cyber', 'BCA', 'BCA AI/DS', 
-  'BTech CSE', 'BTech FSD', 'BTech UI/UX', 'BTech AI/ML'
-];
-
-const facultyCoordinatorOptions = [
-  'Dr. Pankaj', 'Dr. Anshu', 'Dr. Meenu', 'Dr. Swati'
-];
+import * as XLSX from 'xlsx';
 
 interface InternshipTableProps {
   filters: Record<string, any>;
 }
 
+interface Internship {
+  id: string;
+  roll_no: string;
+  name: string;
+  email: string;
+  phone_no: string;
+  domain: string;
+  session: string;
+  year: string;
+  semester: string;
+  program: string;
+  organization_name: string;
+  starting_date: string;
+  ending_date: string;
+  internship_duration: number;
+  position: string;
+  offer_letter_url: string;
+  noc_url: string;
+  ppo_url: string;
+  faculty_coordinator: string;
+  [key: string]: any;
+}
+
+interface DynamicColumn {
+  id: string;
+  name: string;
+  type: string;
+}
+
 const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
   const [internships, setInternships] = useState<Internship[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [totalPages, setTotalPages] = useState(1);
-  const [editingInternship, setEditingInternship] = useState<Internship | null>(null);
-  const [isNewColumnDialogOpen, setIsNewColumnDialogOpen] = useState(false);
-  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [editableCell, setEditableCell] = useState<{ id: string, field: string } | null>(null);
+  const [newValue, setNewValue] = useState<string>('');
+  const [dynamicColumns, setDynamicColumns] = useState<DynamicColumn[]>([]);
   const [newColumnName, setNewColumnName] = useState('');
   const [newColumnType, setNewColumnType] = useState('text');
-  const [dynamicColumns, setDynamicColumns] = useState<any[]>([]);
-  const [dynamicColumnValues, setDynamicColumnValues] = useState<Record<string, Record<string, any>>>({});
-  const [newInternship, setNewInternship] = useState<Partial<Internship>>({});
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [importFilters, setImportFilters] = useState<Record<string, string>>({
-    faculty_coordinator: ''
-  });
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [showAddColumn, setShowAddColumn] = useState(false);
+  const [fileUploading, setFileUploading] = useState<{ id: string, field: string } | null>(null);
+  const [startDate, setStartDate] = useState<Date | null>(null);
+  const [endDate, setEndDate] = useState<Date | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   const { toast } = useToast();
-
-  // Calendar state for date pickers
-  const [isStartDateOpen, setIsStartDateOpen] = useState(false);
-  const [isEndDateOpen, setIsEndDateOpen] = useState(false);
-  const [displayStartDate, setDisplayStartDate] = useState('');
-  const [displayEndDate, setDisplayEndDate] = useState('');
-
-  // Load internships and dynamic columns
+  
+  // Program options
+  const programOptions = [
+    'BSc (CS)', 'BSc (DS)', 'BSc (Cyber)', 'BCA', 'BCA AI/DS', 
+    'BTech CSE', 'BTech FSD', 'BTech UI/UX', 'BTech AI/ML'
+  ];
+  
+  // Faculty coordinator options
+  const facultyCoordinators = ['Dr. Pankaj', 'Dr. Anshu', 'Dr. Meenu', 'Dr. Swati'];
+  
+  // Calculate total pages
+  const totalPages = Math.ceil(internships.length / itemsPerPage);
+  
+  // Get current items for pagination
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentInternships = internships.slice(indexOfFirstItem, indexOfLastItem);
+  
   useEffect(() => {
     fetchInternships();
     fetchDynamicColumns();
-  }, [filters, currentPage, itemsPerPage]);
-
+  }, [filters]);
+  
   const fetchInternships = async () => {
     setLoading(true);
-    const fetchedInternships = await getInternships(filters);
-    
-    // Pagination calculation
-    setTotalPages(Math.ceil(fetchedInternships.length / itemsPerPage));
-    
-    // Get current page data
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const paginatedInternships = fetchedInternships.slice(startIndex, startIndex + itemsPerPage);
-    
-    setInternships(paginatedInternships);
-    
-    // Fetch dynamic column values for each internship
-    const valuesByInternship: Record<string, Record<string, any>> = {};
-    
-    for (const internship of paginatedInternships) {
-      const values = await getInternshipDynamicColumnValues(internship.id);
-      const valueMap: Record<string, any> = {};
-      
-      values.forEach(value => {
-        valueMap[value.column_id] = value.value;
-      });
-      
-      valuesByInternship[internship.id] = valueMap;
-    }
-    
-    setDynamicColumnValues(valuesByInternship);
-    setLoading(false);
-  };
-
-  const fetchDynamicColumns = async () => {
-    const columns = await getInternshipDynamicColumns();
-    setDynamicColumns(columns);
-  };
-
-  // Handle editing internship
-  const handleEdit = (internship: Internship) => {
-    setEditingInternship(internship);
-    setDisplayStartDate(formatDateForDisplay(internship.starting_date));
-    setDisplayEndDate(formatDateForDisplay(internship.ending_date));
-  };
-
-  // Handle saving edits
-  const handleSaveEdit = async () => {
-    if (!editingInternship) return;
-    
     try {
-      // Prepare updates with properly formatted dates
-      const updates: Partial<Internship> = {
-        ...editingInternship
-      };
+      let query = supabase.from('internships').select('*');
       
-      // Convert display dates back to ISO format
-      if (displayStartDate) {
-        updates.starting_date = parseDisplayDate(displayStartDate);
-      }
-      
-      if (displayEndDate) {
-        updates.ending_date = parseDisplayDate(displayEndDate);
-      }
-      
-      const updatedInternship = await updateInternship(editingInternship.id, updates);
-      
-      if (updatedInternship) {
-        // Update dynamic column values
-        if (dynamicColumns.length > 0) {
-          const internshipValues = dynamicColumnValues[editingInternship.id] || {};
-          
-          for (const column of dynamicColumns) {
-            const value = internshipValues[column.id];
-            if (value !== undefined) {
-              await addInternshipDynamicColumnValue(column.id, editingInternship.id, value);
-            }
+      // Apply filters if they exist
+      if (filters && Object.keys(filters).length > 0) {
+        Object.entries(filters).forEach(([key, value]) => {
+          if (value) {
+            query = query.eq(key, value);
           }
-        }
-        
-        toast({
-          title: 'Internship Updated',
-          description: 'The internship has been successfully updated.',
         });
+      }
+      
+      const { data, error } = await query.order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error('Error fetching internships:', error);
+        throw error;
+      }
+      
+      if (data) {
+        // Format dates for display (dd-mm-yyyy)
+        const formattedData = data.map(internship => ({
+          ...internship,
+          starting_date: internship.starting_date ? formatDateForDisplay(internship.starting_date) : '',
+          ending_date: internship.ending_date ? formatDateForDisplay(internship.ending_date) : ''
+        }));
         
-        fetchInternships();
+        setInternships(formattedData);
       }
     } catch (error) {
-      console.error('Error saving internship:', error);
-      toast({
-        title: 'Update Failed',
-        description: 'There was an error updating the internship.',
-        variant: 'destructive',
-      });
-    }
-    
-    setEditingInternship(null);
-  };
-
-  // Handle deleting internship
-  const handleDelete = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this internship?')) {
-      const success = await deleteInternship(id);
-      
-      if (success) {
-        toast({
-          title: 'Internship Deleted',
-          description: 'The internship has been successfully deleted.',
-        });
-        
-        fetchInternships();
-      } else {
-        toast({
-          title: 'Delete Failed',
-          description: 'There was an error deleting the internship.',
-          variant: 'destructive',
-        });
-      }
-    }
-  };
-
-  // Handle adding new dynamic column
-  const handleAddColumn = async () => {
-    if (!newColumnName) {
+      console.error('Error:', error);
       toast({
         title: 'Error',
-        description: 'Please provide a column name.',
+        description: 'Failed to fetch internships',
         variant: 'destructive',
       });
-      return;
-    }
-    
-    const column = await addInternshipDynamicColumn(newColumnName, newColumnType);
-    
-    if (column) {
-      toast({
-        title: 'Column Added',
-        description: `The column "${newColumnName}" has been added successfully.`,
-      });
-      
-      fetchDynamicColumns();
-      setNewColumnName('');
-      setNewColumnType('text');
-      setIsNewColumnDialogOpen(false);
-    } else {
-      toast({
-        title: 'Error',
-        description: 'Failed to add new column.',
-        variant: 'destructive',
-      });
+    } finally {
+      setLoading(false);
     }
   };
-
-  // Handle file upload for a specific internship
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, internshipId: string, fieldName: string) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
+  
+  const fetchDynamicColumns = async () => {
     try {
-      const filePath = `internships/${internshipId}/${fieldName}/${file.name}`;
-      const fileUrl = await uploadFile(file, 'documents', filePath);
+      const { data, error } = await supabase
+        .from('internship_dynamic_columns')
+        .select('*')
+        .order('created_at', { ascending: true });
       
-      if (fileUrl) {
-        const updates: Partial<Record<string, string>> = {};
-        updates[`${fieldName}_url`] = fileUrl;
-        
-        const success = await updateInternship(internshipId, updates as Partial<Internship>);
-        
-        if (success) {
-          toast({
-            title: 'File Uploaded',
-            description: 'The file has been uploaded successfully.',
-          });
-          
-          fetchInternships();
-        }
+      if (error) {
+        console.error('Error fetching dynamic columns:', error);
+        throw error;
+      }
+      
+      if (data) {
+        setDynamicColumns(data);
       }
     } catch (error) {
-      console.error('Error uploading file:', error);
+      console.error('Error:', error);
       toast({
-        title: 'Upload Failed',
-        description: 'There was an error uploading the file.',
+        title: 'Error',
+        description: 'Failed to fetch dynamic columns',
         variant: 'destructive',
       });
     }
   };
-
-  // Handle Excel file import
-  const handleExcelImport = async () => {
-    if (!selectedFile) {
-      toast({
-        title: 'Error',
-        description: 'Please select a file to upload.',
-        variant: 'destructive',
-      });
-      return;
-    }
-    
-    if (!importFilters.faculty_coordinator) {
-      toast({
-        title: 'Error',
-        description: 'Please select a Faculty Coordinator for the imported data.',
-        variant: 'destructive',
-      });
-      return;
-    }
+  
+  const formatDateForDisplay = (dateString: string) => {
+    const date = new Date(dateString);
+    return `${date.getDate().toString().padStart(2, '0')}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getFullYear()}`;
+  };
+  
+  const formatDateForDB = (dateString: string) => {
+    const [day, month, year] = dateString.split('-');
+    return `${year}-${month}-${day}`;
+  };
+  
+  const handleEdit = (id: string, field: string, value: string) => {
+    setEditableCell({ id, field });
+    setNewValue(value);
+  };
+  
+  const handleSave = async () => {
+    if (!editableCell) return;
     
     try {
-      const reader = new FileReader();
+      const { id, field } = editableCell;
       
-      reader.onload = async (e) => {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const sheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(sheet);
-        
-        // Process and insert data
-        const result = await supabase.from('internships').insert(
-          jsonData.map((row: any) => ({
-            roll_no: row['Roll No'] || '',
-            name: row['Name'] || '',
-            email: row['Email'] || '',
-            phone_no: row['Phone No'] || '',
-            domain: row['Domain'] || '',
-            session: row['Session'] || '',
-            year: row['Year'] || '',
-            semester: row['Semester'] || '',
-            program: row['Program'] || '',
-            organization_name: row['Organization Name'] || '',
-            starting_date: row['Starting Date'] || null,
-            ending_date: row['Ending Date'] || null,
-            position: row['Position'] || '',
-            faculty_coordinator: importFilters.faculty_coordinator
-          }))
-        );
-        
-        if (result.error) {
-          throw result.error;
-        }
-        
-        toast({
-          title: 'Import Successful',
-          description: `${jsonData.length} records have been imported.`,
-        });
-        
-        setIsImportDialogOpen(false);
-        setSelectedFile(null);
-        fetchInternships();
+      // For date fields, convert from dd-mm-yyyy to yyyy-mm-dd for database
+      let valueToSave = newValue;
+      if (field === 'starting_date' || field === 'ending_date') {
+        valueToSave = formatDateForDB(newValue);
+      }
+      
+      const updateData: Record<string, any> = {
+        [field]: valueToSave,
+        updated_at: new Date().toISOString()
       };
       
-      reader.readAsArrayBuffer(selectedFile);
-    } catch (error) {
-      console.error('Error importing Excel file:', error);
+      const { error } = await supabase
+        .from('internships')
+        .update(updateData)
+        .eq('id', id);
+      
+      if (error) {
+        console.error('Error updating internship:', error);
+        throw error;
+      }
+      
+      // Update local state
+      setInternships(internships.map(internship => 
+        internship.id === id 
+          ? { ...internship, [field]: newValue } 
+          : internship
+      ));
+      
       toast({
-        title: 'Import Failed',
-        description: 'There was an error importing the Excel file.',
+        title: 'Success',
+        description: 'Internship updated successfully',
+      });
+    } catch (error) {
+      console.error('Error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update internship',
+        variant: 'destructive',
+      });
+    } finally {
+      setEditableCell(null);
+      setNewValue('');
+    }
+  };
+  
+  const handleCancel = () => {
+    setEditableCell(null);
+    setNewValue('');
+  };
+  
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this internship record?')) return;
+    
+    try {
+      const { error } = await supabase
+        .from('internships')
+        .delete()
+        .eq('id', id);
+      
+      if (error) {
+        console.error('Error deleting internship:', error);
+        throw error;
+      }
+      
+      // Update local state
+      setInternships(internships.filter(internship => internship.id !== id));
+      
+      toast({
+        title: 'Success',
+        description: 'Internship deleted successfully',
+      });
+    } catch (error) {
+      console.error('Error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete internship',
         variant: 'destructive',
       });
     }
   };
-
-  // Handle Excel export
-  const handleExport = () => {
+  
+  const handleAddColumn = async () => {
+    if (!newColumnName.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Column name cannot be empty',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
     try {
-      // Prepare data for export
-      const exportData = internships.map(internship => {
-        const rowData: Record<string, any> = {
-          'Roll No': internship.roll_no,
-          'Name': internship.name,
-          'Email': internship.email,
-          'Phone No': internship.phone_no,
-          'Domain': internship.domain,
-          'Program': internship.program,
-          'Session': internship.session,
-          'Year': internship.year,
-          'Semester': internship.semester,
-          'Organization Name': internship.organization_name,
-          'Starting Date': formatDateForDisplay(internship.starting_date),
-          'Ending Date': formatDateForDisplay(internship.ending_date),
-          'Internship Duration': internship.internship_duration,
-          'Position': internship.position,
-          'Faculty Coordinator': internship.faculty_coordinator
+      const { data, error } = await supabase
+        .from('internship_dynamic_columns')
+        .insert({
+          name: newColumnName,
+          type: newColumnType,
+        })
+        .select();
+      
+      if (error) {
+        console.error('Error adding column:', error);
+        throw error;
+      }
+      
+      if (data && data.length > 0) {
+        setDynamicColumns([...dynamicColumns, data[0]]);
+        
+        toast({
+          title: 'Success',
+          description: 'Column added successfully',
+        });
+        
+        setNewColumnName('');
+        setNewColumnType('text');
+        setShowAddColumn(false);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to add column',
+        variant: 'destructive',
+      });
+    }
+  };
+  
+  const handleDynamicColumnValueChange = async (internshipId: string, columnId: string, value: string) => {
+    try {
+      // Check if a value already exists
+      const { data: existingValue, error: fetchError } = await supabase
+        .from('internship_dynamic_column_values')
+        .select('*')
+        .eq('internship_id', internshipId)
+        .eq('column_id', columnId)
+        .single();
+      
+      if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 means no rows returned
+        console.error('Error fetching dynamic column value:', fetchError);
+        throw fetchError;
+      }
+      
+      if (existingValue) {
+        // Update existing value
+        const { error } = await supabase
+          .from('internship_dynamic_column_values')
+          .update({ value })
+          .eq('id', existingValue.id);
+        
+        if (error) {
+          console.error('Error updating dynamic column value:', error);
+          throw error;
+        }
+      } else {
+        // Insert new value
+        const { error } = await supabase
+          .from('internship_dynamic_column_values')
+          .insert({
+            internship_id: internshipId,
+            column_id: columnId,
+            value,
+          });
+        
+        if (error) {
+          console.error('Error inserting dynamic column value:', error);
+          throw error;
+        }
+      }
+      
+      toast({
+        title: 'Success',
+        description: 'Value updated successfully',
+      });
+    } catch (error) {
+      console.error('Error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update value',
+        variant: 'destructive',
+      });
+    }
+  };
+  
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, id: string, field: string) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    
+    setFileUploading({ id, field });
+    const file = e.target.files[0];
+    
+    try {
+      // Upload file to Supabase storage
+      const fileName = `${field}_${id}_${new Date().getTime()}`;
+      const { data, error } = await supabase.storage
+        .from('documents')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: false,
+        });
+      
+      if (error) {
+        console.error('Error uploading file:', error);
+        throw error;
+      }
+      
+      if (data) {
+        // Get public URL
+        const { data: publicURLData } = supabase.storage
+          .from('documents')
+          .getPublicUrl(data.path);
+        
+        // Update internship with file URL
+        const { error: updateError } = await supabase
+          .from('internships')
+          .update({
+            [field]: publicURLData.publicUrl,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', id);
+        
+        if (updateError) {
+          console.error('Error updating internship with file URL:', updateError);
+          throw updateError;
+        }
+        
+        // Update local state
+        setInternships(internships.map(internship => 
+          internship.id === id 
+            ? { ...internship, [field]: publicURLData.publicUrl } 
+            : internship
+        ));
+        
+        toast({
+          title: 'Success',
+          description: 'File uploaded successfully',
+        });
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to upload file',
+        variant: 'destructive',
+      });
+    } finally {
+      setFileUploading(null);
+    }
+  };
+  
+  const handleAddInternship = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('internships')
+        .insert({
+          roll_no: '',
+          name: '',
+          email: '',
+          phone_no: '',
+          domain: '',
+          session: '',
+          year: '',
+          semester: '',
+          program: '',
+          organization_name: '',
+          position: '',
+          faculty_coordinator: '',
+        })
+        .select();
+      
+      if (error) {
+        console.error('Error adding internship:', error);
+        throw error;
+      }
+      
+      if (data && data.length > 0) {
+        // Format dates for display
+        const newInternship = {
+          ...data[0],
+          starting_date: data[0].starting_date ? formatDateForDisplay(data[0].starting_date) : '',
+          ending_date: data[0].ending_date ? formatDateForDisplay(data[0].ending_date) : ''
         };
         
-        // Add dynamic columns
-        dynamicColumns.forEach(column => {
-          const values = dynamicColumnValues[internship.id] || {};
-          rowData[column.name] = values[column.id] || '';
-        });
+        setInternships([newInternship, ...internships]);
         
-        return rowData;
+        toast({
+          title: 'Success',
+          description: 'New internship added',
+        });
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to add internship',
+        variant: 'destructive',
       });
+    }
+  };
+  
+  const exportToExcel = () => {
+    try {
+      // Create worksheet
+      const worksheet = XLSX.utils.json_to_sheet(
+        internships.map(internship => {
+          const exportData: Record<string, any> = { ...internship };
+          
+          // Remove unnecessary fields
+          delete exportData.id;
+          delete exportData.created_at;
+          delete exportData.updated_at;
+          
+          return exportData;
+        })
+      );
       
-      // Create workbook and worksheet
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      // Create workbook
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Internships');
       
-      // Generate Excel file
-      XLSX.writeFile(workbook, 'InternshipData.xlsx');
+      // Export to file
+      XLSX.writeFile(workbook, 'internships_data.xlsx');
       
       toast({
-        title: 'Export Successful',
-        description: 'The internship data has been exported to Excel.',
+        title: 'Success',
+        description: 'Data exported to Excel',
       });
     } catch (error) {
-      console.error('Error exporting data:', error);
-      toast({
-        title: 'Export Failed',
-        description: 'There was an error exporting the data to Excel.',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  // Handle adding new internship
-  const handleAddInternship = async () => {
-    try {
-      if (!newInternship.roll_no || !newInternship.name) {
-        toast({
-          title: 'Error',
-          description: 'Roll No and Name are required fields.',
-          variant: 'destructive',
-        });
-        return;
-      }
-      
-      // Convert dates to ISO format
-      let startDateISO = '';
-      let endDateISO = '';
-      
-      if (displayStartDate) {
-        startDateISO = parseDisplayDate(displayStartDate);
-      }
-      
-      if (displayEndDate) {
-        endDateISO = parseDisplayDate(displayEndDate);
-      }
-      
-      const internshipData = {
-        ...newInternship,
-        starting_date: startDateISO,
-        ending_date: endDateISO
-      };
-      
-      const addedInternship = await addInternship(internshipData as Omit<Internship, 'id' | 'created_at' | 'updated_at' | 'internship_duration'>);
-      
-      if (addedInternship) {
-        toast({
-          title: 'Internship Added',
-          description: 'The internship has been added successfully.',
-        });
-        
-        setIsAddDialogOpen(false);
-        setNewInternship({});
-        setDisplayStartDate('');
-        setDisplayEndDate('');
-        fetchInternships();
-      } else {
-        throw new Error('Failed to add internship');
-      }
-    } catch (error) {
-      console.error('Error adding internship:', error);
+      console.error('Error exporting to Excel:', error);
       toast({
         title: 'Error',
-        description: 'Failed to add new internship.',
+        description: 'Failed to export data',
         variant: 'destructive',
       });
     }
   };
-
-  // Handle editing cell value
-  const handleCellEdit = (internshipId: string, field: string, value: string) => {
-    setInternships(prevInternships => 
-      prevInternships.map(internship => 
-        internship.id === internshipId ? { ...internship, [field]: value } : internship
-      )
-    );
-  };
-
-  // Handle editing dynamic column value
-  const handleDynamicCellEdit = (internshipId: string, columnId: string, value: string) => {
-    setDynamicColumnValues(prev => ({
-      ...prev,
-      [internshipId]: {
-        ...(prev[internshipId] || {}),
-        [columnId]: value
+  
+  const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    
+    reader.onload = async (e) => {
+      try {
+        if (!e.target || !e.target.result) return;
+        
+        const data = new Uint8Array(e.target.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        
+        // Get first worksheet
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        
+        // Convert to JSON
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+        
+        // Insert into database
+        for (const row of jsonData) {
+          const internshipData: Record<string, any> = {};
+          
+          // Map Excel columns to database columns
+          Object.entries(row).forEach(([key, value]) => {
+            // Handle date fields
+            if (key === 'starting_date' || key === 'ending_date') {
+              if (typeof value === 'string') {
+                // If date is in dd-mm-yyyy format, convert to yyyy-mm-dd
+                if (/^\d{2}-\d{2}-\d{4}$/.test(value)) {
+                  internshipData[key] = formatDateForDB(value);
+                } else {
+                  internshipData[key] = value;
+                }
+              } else if (value instanceof Date) {
+                internshipData[key] = value.toISOString().split('T')[0];
+              } else {
+                internshipData[key] = value;
+              }
+            } else {
+              internshipData[key] = value;
+            }
+          });
+          
+          // Insert into database
+          await supabase.from('internships').insert(internshipData);
+        }
+        
+        toast({
+          title: 'Success',
+          description: `${jsonData.length} records imported successfully`,
+        });
+        
+        // Refresh data
+        fetchInternships();
+      } catch (error) {
+        console.error('Error importing Excel:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to import data',
+          variant: 'destructive',
+        });
       }
-    }));
+    };
+    
+    reader.readAsArrayBuffer(file);
   };
-
-  // Format date for display
-  const displayDate = (dateString?: string) => {
-    if (!dateString) return '';
-    try {
-      return formatDateForDisplay(dateString);
-    } catch (error) {
-      return dateString;
+  
+  // Page navigation
+  const nextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
     }
   };
-
-  // Generate page buttons
-  const pageButtons = [];
-  for (let i = 1; i <= totalPages; i++) {
-    pageButtons.push(
-      <PaginationItem key={i}>
-        <PaginationLink
-          onClick={() => setCurrentPage(i)}
-          isActive={currentPage === i}
+  
+  const prevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+  
+  const paginate = (pageNumber: number) => {
+    setCurrentPage(pageNumber);
+  };
+  
+  const renderCell = (internship: Internship, field: string, displayField: string) => {
+    if (editableCell && editableCell.id === internship.id && editableCell.field === field) {
+      // Different input types based on the field
+      if (field === 'faculty_coordinator') {
+        return (
+          <div className="flex items-center">
+            <select
+              value={newValue}
+              onChange={(e) => setNewValue(e.target.value)}
+              className="w-full p-1 border rounded"
+            >
+              <option value="">Select Coordinator</option>
+              {facultyCoordinators.map((coord) => (
+                <option key={coord} value={coord}>
+                  {coord}
+                </option>
+              ))}
+            </select>
+            <Button size="sm" variant="ghost" onClick={handleSave} className="ml-1">✓</Button>
+            <Button size="sm" variant="ghost" onClick={handleCancel} className="ml-1">✕</Button>
+          </div>
+        );
+      } else if (field === 'program') {
+        return (
+          <div className="flex items-center">
+            <select
+              value={newValue}
+              onChange={(e) => setNewValue(e.target.value)}
+              className="w-full p-1 border rounded"
+            >
+              <option value="">Select Program</option>
+              {programOptions.map((prog) => (
+                <option key={prog} value={prog}>
+                  {prog}
+                </option>
+              ))}
+            </select>
+            <Button size="sm" variant="ghost" onClick={handleSave} className="ml-1">✓</Button>
+            <Button size="sm" variant="ghost" onClick={handleCancel} className="ml-1">✕</Button>
+          </div>
+        );
+      } else if (field === 'starting_date' || field === 'ending_date') {
+        return (
+          <div className="flex items-center">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="w-full justify-start text-left">
+                  {newValue || 'Pick a date'}
+                  <CalendarIcon className="ml-auto h-4 w-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0">
+                <Calendar
+                  mode="single"
+                  selected={newValue ? new Date(formatDateForDB(newValue)) : undefined}
+                  onSelect={(date) => {
+                    if (date) {
+                      setNewValue(format(date, 'dd-MM-yyyy'));
+                    }
+                  }}
+                />
+              </PopoverContent>
+            </Popover>
+            <Button size="sm" variant="ghost" onClick={handleSave} className="ml-1">✓</Button>
+            <Button size="sm" variant="ghost" onClick={handleCancel} className="ml-1">✕</Button>
+          </div>
+        );
+      } else {
+        return (
+          <div className="flex items-center">
+            <Input
+              value={newValue}
+              onChange={(e) => setNewValue(e.target.value)}
+              className="w-full p-1"
+            />
+            <Button size="sm" variant="ghost" onClick={handleSave} className="ml-1">✓</Button>
+            <Button size="sm" variant="ghost" onClick={handleCancel} className="ml-1">✕</Button>
+          </div>
+        );
+      }
+    } else {
+      // File upload fields
+      if (field === 'offer_letter_url' || field === 'noc_url' || field === 'ppo_url') {
+        return (
+          <div className="flex items-center justify-between">
+            {internship[field] ? (
+              <a href={internship[field]} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center">
+                <FileText size={16} className="mr-1" />
+                View
+              </a>
+            ) : (
+              <span className="text-gray-400">No file</span>
+            )}
+            <label className="cursor-pointer text-secondary hover:text-secondary-dark ml-2">
+              {fileUploading && fileUploading.id === internship.id && fileUploading.field === field ? (
+                <span>Uploading...</span>
+              ) : (
+                <span>Upload</span>
+              )}
+              <input
+                type="file"
+                accept=".pdf"
+                className="hidden"
+                onChange={(e) => handleFileUpload(e, internship.id, field)}
+              />
+            </label>
+          </div>
+        );
+      }
+      
+      // For dates, show calendar picker
+      if (field === 'starting_date' || field === 'ending_date') {
+        return (
+          <div
+            className="cursor-pointer hover:bg-gray-100 p-1 rounded"
+            onClick={() => handleEdit(internship.id, field, internship[field] || '')}
+          >
+            {internship[field] || 'Click to add'}
+          </div>
+        );
+      }
+      
+      // For regular fields
+      return (
+        <div
+          className="cursor-pointer hover:bg-gray-100 p-1 rounded"
+          onClick={() => handleEdit(internship.id, field, internship[field] || '')}
         >
-          {i}
-        </PaginationLink>
-      </PaginationItem>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-1">Internships</h2>
-          <p className="text-gray-600 dark:text-gray-300">
-            Manage student internship data
-          </p>
+          {internship[field] || 'Click to add'}
         </div>
-        
-        <div className="flex flex-wrap gap-2 mt-4 sm:mt-0">
-          <Button variant="outline" onClick={() => setIsNewColumnDialogOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Column
+      );
+    }
+  };
+  
+  if (loading) {
+    return <div className="p-8 text-center">Loading internship data...</div>;
+  }
+  
+  return (
+    <div className="overflow-x-auto">
+      <div className="mb-6 flex flex-wrap justify-between items-center gap-4">
+        <div className="flex items-center space-x-4">
+          <Button onClick={handleAddInternship} className="bg-primary hover:bg-primary/90">
+            Add New Internship
           </Button>
-          
-          <Button variant="outline" onClick={() => setIsImportDialogOpen(true)}>
-            <Upload className="mr-2 h-4 w-4" />
-            Import Excel
-          </Button>
-          
-          <Button variant="outline" onClick={handleExport}>
-            <Download className="mr-2 h-4 w-4" />
-            Export Excel
-          </Button>
-          
-          <Button onClick={() => setIsAddDialogOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Internship
+          <div>
+            <label htmlFor="import-excel" className="cursor-pointer">
+              <Button variant="outline" className="mr-2">
+                Import Excel
+              </Button>
+              <input
+                id="import-excel"
+                type="file"
+                accept=".xlsx, .xls"
+                className="hidden"
+                onChange={handleImportExcel}
+              />
+            </label>
+            <Button variant="outline" onClick={exportToExcel}>
+              Export Excel
+            </Button>
+          </div>
+        </div>
+        <div>
+          <Button 
+            variant={showAddColumn ? "default" : "outline"} 
+            onClick={() => setShowAddColumn(!showAddColumn)}
+          >
+            {showAddColumn ? 'Cancel' : 'Add Column'}
           </Button>
         </div>
       </div>
       
-      <Card className="overflow-x-auto">
+      {showAddColumn && (
+        <div className="mb-6 p-4 border rounded-md bg-gray-50">
+          <h3 className="text-lg font-semibold mb-3">Add New Column</h3>
+          <div className="flex flex-wrap gap-4">
+            <div className="grow">
+              <label className="block text-sm font-medium mb-1">Column Name</label>
+              <Input
+                value={newColumnName}
+                onChange={(e) => setNewColumnName(e.target.value)}
+                placeholder="Enter column name"
+              />
+            </div>
+            <div className="w-40">
+              <label className="block text-sm font-medium mb-1">Type</label>
+              <select
+                value={newColumnType}
+                onChange={(e) => setNewColumnType(e.target.value)}
+                className="w-full p-2 border rounded"
+              >
+                <option value="text">Text</option>
+                <option value="number">Number</option>
+                <option value="date">Date</option>
+                <option value="file">File</option>
+              </select>
+            </div>
+            <div className="flex items-end">
+              <Button onClick={handleAddColumn}>Add Column</Button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      <div className="border rounded-md overflow-hidden">
         <Table>
-          <TableHeader>
+          <TableHeader className="bg-gray-100">
             <TableRow>
               <TableHead>Roll No</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Email</TableHead>
-              <TableHead>Phone No</TableHead>
-              <TableHead>Program</TableHead>
-              <TableHead>Domain</TableHead>
-              <TableHead>Session</TableHead>
-              <TableHead>Year</TableHead>
-              <TableHead>Semester</TableHead>
+              <TableHead>Phone</TableHead>
               <TableHead>Organization</TableHead>
               <TableHead>Position</TableHead>
-              <TableHead>Start Date</TableHead>
-              <TableHead>End Date</TableHead>
-              <TableHead>Duration (Days)</TableHead>
+              <TableHead>Program</TableHead>
+              <TableHead>Session</TableHead>
+              <TableHead>Starting Date</TableHead>
+              <TableHead>Ending Date</TableHead>
+              <TableHead>Duration (days)</TableHead>
               <TableHead>Faculty Coordinator</TableHead>
               <TableHead>Offer Letter</TableHead>
               <TableHead>NOC</TableHead>
               <TableHead>PPO</TableHead>
-              {dynamicColumns.map(column => (
+              {dynamicColumns.map((column) => (
                 <TableHead key={column.id}>{column.name}</TableHead>
               ))}
               <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading ? (
+            {currentInternships.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={20 + dynamicColumns.length} className="text-center py-10">
-                  <div className="flex justify-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                  </div>
-                  <p className="mt-2 text-sm text-gray-500">Loading internship data...</p>
-                </TableCell>
-              </TableRow>
-            ) : internships.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={20 + dynamicColumns.length} className="text-center py-10">
-                  <p>No internships found. Add a new internship or import from Excel.</p>
+                <TableCell colSpan={15 + dynamicColumns.length} className="text-center py-8">
+                  No internships found. Click "Add New Internship" to create one.
                 </TableCell>
               </TableRow>
             ) : (
-              internships.map(internship => (
-                <TableRow key={internship.id}>
-                  <TableCell>
-                    {editingInternship?.id === internship.id ? (
-                      <Input 
-                        value={editingInternship.roll_no} 
-                        onChange={e => setEditingInternship({...editingInternship, roll_no: e.target.value})}
-                      />
-                    ) : (
-                      internship.roll_no
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editingInternship?.id === internship.id ? (
-                      <Input 
-                        value={editingInternship.name} 
-                        onChange={e => setEditingInternship({...editingInternship, name: e.target.value})}
-                      />
-                    ) : (
-                      internship.name
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editingInternship?.id === internship.id ? (
-                      <Input 
-                        value={editingInternship.email || ''} 
-                        onChange={e => setEditingInternship({...editingInternship, email: e.target.value})}
-                      />
-                    ) : (
-                      internship.email
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editingInternship?.id === internship.id ? (
-                      <Input 
-                        value={editingInternship.phone_no || ''} 
-                        onChange={e => setEditingInternship({...editingInternship, phone_no: e.target.value})}
-                      />
-                    ) : (
-                      internship.phone_no
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editingInternship?.id === internship.id ? (
-                      <Select 
-                        value={editingInternship.program || ''} 
-                        onValueChange={value => setEditingInternship({...editingInternship, program: value})}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select program" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {programOptions.map(option => (
-                            <SelectItem key={option} value={option}>{option}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      internship.program
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editingInternship?.id === internship.id ? (
-                      <Input 
-                        value={editingInternship.domain || ''} 
-                        onChange={e => setEditingInternship({...editingInternship, domain: e.target.value})}
-                      />
-                    ) : (
-                      internship.domain
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editingInternship?.id === internship.id ? (
-                      <Input 
-                        value={editingInternship.session || ''} 
-                        onChange={e => setEditingInternship({...editingInternship, session: e.target.value})}
-                      />
-                    ) : (
-                      internship.session
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editingInternship?.id === internship.id ? (
-                      <Input 
-                        value={editingInternship.year || ''} 
-                        onChange={e => setEditingInternship({...editingInternship, year: e.target.value})}
-                      />
-                    ) : (
-                      internship.year
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editingInternship?.id === internship.id ? (
-                      <Input 
-                        value={editingInternship.semester || ''} 
-                        onChange={e => setEditingInternship({...editingInternship, semester: e.target.value})}
-                      />
-                    ) : (
-                      internship.semester
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editingInternship?.id === internship.id ? (
-                      <Input 
-                        value={editingInternship.organization_name || ''} 
-                        onChange={e => setEditingInternship({...editingInternship, organization_name: e.target.value})}
-                      />
-                    ) : (
-                      internship.organization_name
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editingInternship?.id === internship.id ? (
-                      <Input 
-                        value={editingInternship.position || ''} 
-                        onChange={e => setEditingInternship({...editingInternship, position: e.target.value})}
-                      />
-                    ) : (
-                      internship.position
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editingInternship?.id === internship.id ? (
-                      <Popover open={isStartDateOpen} onOpenChange={setIsStartDateOpen}>
-                        <PopoverTrigger asChild>
-                          <Button variant="outline" className="w-full justify-start text-left font-normal">
-                            {displayStartDate || 'Select date'}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                          <Calendar
-                            mode="single"
-                            selected={displayStartDate ? new Date(parseDisplayDate(displayStartDate)) : undefined}
-                            onSelect={(date) => {
-                              if (date) {
-                                const formatted = format(date, 'dd-MM-yyyy');
-                                setDisplayStartDate(formatted);
-                              }
-                              setIsStartDateOpen(false);
-                            }}
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    ) : (
-                      displayDate(internship.starting_date)
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editingInternship?.id === internship.id ? (
-                      <Popover open={isEndDateOpen} onOpenChange={setIsEndDateOpen}>
-                        <PopoverTrigger asChild>
-                          <Button variant="outline" className="w-full justify-start text-left font-normal">
-                            {displayEndDate || 'Select date'}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                          <Calendar
-                            mode="single"
-                            selected={displayEndDate ? new Date(parseDisplayDate(displayEndDate)) : undefined}
-                            onSelect={(date) => {
-                              if (date) {
-                                const formatted = format(date, 'dd-MM-yyyy');
-                                setDisplayEndDate(formatted);
-                              }
-                              setIsEndDateOpen(false);
-                            }}
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    ) : (
-                      displayDate(internship.ending_date)
-                    )}
-                  </TableCell>
-                  <TableCell>{internship.internship_duration}</TableCell>
-                  <TableCell>
-                    {editingInternship?.id === internship.id ? (
-                      <Select 
-                        value={editingInternship.faculty_coordinator || ''} 
-                        onValueChange={value => setEditingInternship({...editingInternship, faculty_coordinator: value})}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select coordinator" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {facultyCoordinatorOptions.map(option => (
-                            <SelectItem key={option} value={option}>{option}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      internship.faculty_coordinator
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editingInternship?.id === internship.id ? (
-                      <Input 
-                        type="file" 
-                        accept=".pdf" 
-                        onChange={(e) => handleFileUpload(e, internship.id, 'offer_letter')}
-                      />
-                    ) : internship.offer_letter_url ? (
-                      <a href={internship.offer_letter_url} target="_blank" rel="noopener noreferrer">
-                        <File className="h-5 w-5 text-blue-500" />
-                      </a>
-                    ) : (
-                      <Input 
-                        type="file" 
-                        accept=".pdf"
-                        onChange={(e) => handleFileUpload(e, internship.id, 'offer_letter')}
-                      />
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editingInternship?.id === internship.id ? (
-                      <Input 
-                        type="file" 
-                        accept=".pdf" 
-                        onChange={(e) => handleFileUpload(e, internship.id, 'noc')}
-                      />
-                    ) : internship.noc_url ? (
-                      <a href={internship.noc_url} target="_blank" rel="noopener noreferrer">
-                        <File className="h-5 w-5 text-blue-500" />
-                      </a>
-                    ) : (
-                      <Input 
-                        type="file" 
-                        accept=".pdf"
-                        onChange={(e) => handleFileUpload(e, internship.id, 'noc')}
-                      />
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editingInternship?.id === internship.id ? (
-                      <Input 
-                        type="file" 
-                        accept=".pdf" 
-                        onChange={(e) => handleFileUpload(e, internship.id, 'ppo')}
-                      />
-                    ) : internship.ppo_url ? (
-                      <a href={internship.ppo_url} target="_blank" rel="noopener noreferrer">
-                        <File className="h-5 w-5 text-blue-500" />
-                      </a>
-                    ) : (
-                      <Input 
-                        type="file" 
-                        accept=".pdf"
-                        onChange={(e) => handleFileUpload(e, internship.id, 'ppo')}
-                      />
-                    )}
-                  </TableCell>
+              currentInternships.map((internship) => (
+                <TableRow key={internship.id} className="hover:bg-gray-50">
+                  <TableCell>{renderCell(internship, 'roll_no', 'Roll No')}</TableCell>
+                  <TableCell>{renderCell(internship, 'name', 'Name')}</TableCell>
+                  <TableCell>{renderCell(internship, 'email', 'Email')}</TableCell>
+                  <TableCell>{renderCell(internship, 'phone_no', 'Phone')}</TableCell>
+                  <TableCell>{renderCell(internship, 'organization_name', 'Organization')}</TableCell>
+                  <TableCell>{renderCell(internship, 'position', 'Position')}</TableCell>
+                  <TableCell>{renderCell(internship, 'program', 'Program')}</TableCell>
+                  <TableCell>{renderCell(internship, 'session', 'Session')}</TableCell>
+                  <TableCell>{renderCell(internship, 'starting_date', 'Starting Date')}</TableCell>
+                  <TableCell>{renderCell(internship, 'ending_date', 'Ending Date')}</TableCell>
+                  <TableCell>{internship.internship_duration || '-'}</TableCell>
+                  <TableCell>{renderCell(internship, 'faculty_coordinator', 'Faculty Coordinator')}</TableCell>
+                  <TableCell>{renderCell(internship, 'offer_letter_url', 'Offer Letter')}</TableCell>
+                  <TableCell>{renderCell(internship, 'noc_url', 'NOC')}</TableCell>
+                  <TableCell>{renderCell(internship, 'ppo_url', 'PPO')}</TableCell>
                   
                   {/* Dynamic columns */}
-                  {dynamicColumns.map(column => {
-                    const columnValues = dynamicColumnValues[internship.id] || {};
-                    const cellValue = columnValues[column.id] || '';
-                    
-                    return (
-                      <TableCell key={`${internship.id}-${column.id}`}>
-                        {editingInternship?.id === internship.id ? (
-                          column.type === 'file' ? (
-                            <Input 
-                              type="file" 
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                  handleDynamicCellEdit(internship.id, column.id, 'Uploading...');
-                                  uploadFile(file, 'documents', `internships/${internship.id}/dynamic/${column.id}/${file.name}`)
-                                    .then(url => {
-                                      if (url) {
-                                        handleDynamicCellEdit(internship.id, column.id, url);
-                                        addInternshipDynamicColumnValue(column.id, internship.id, url);
+                  {dynamicColumns.map((column) => (
+                    <TableCell key={column.id}>
+                      {
+                        (() => {
+                          if (editableCell && editableCell.id === internship.id && editableCell.field === column.id) {
+                            return (
+                              <div className="flex items-center">
+                                <Input
+                                  value={newValue}
+                                  onChange={(e) => setNewValue(e.target.value)}
+                                  className="w-full p-1"
+                                />
+                                <Button size="sm" variant="ghost" onClick={handleSave} className="ml-1">✓</Button>
+                                <Button size="sm" variant="ghost" onClick={handleCancel} className="ml-1">✕</Button>
+                              </div>
+                            );
+                          } else {
+                            return (
+                              <div
+                                className="cursor-pointer hover:bg-gray-100 p-1 rounded"
+                                onClick={() => {
+                                  setEditableCell({ id: internship.id, field: column.id });
+                                  // Fetch existing value
+                                  supabase
+                                    .from('internship_dynamic_column_values')
+                                    .select('value')
+                                    .eq('internship_id', internship.id)
+                                    .eq('column_id', column.id)
+                                    .single()
+                                    .then(({ data, error }) => {
+                                      if (error && error.code !== 'PGRST116') {
+                                        console.error('Error fetching dynamic column value:', error);
+                                        toast({
+                                          title: 'Error',
+                                          description: 'Failed to fetch dynamic column value',
+                                          variant: 'destructive',
+                                        });
+                                      } else {
+                                        setNewValue(data ? data.value : '');
                                       }
                                     });
+                                }}
+                              >
+                                {
+                                  (() => {
+                                    // Fetch existing value
+                                    const valuePromise = supabase
+                                      .from('internship_dynamic_column_values')
+                                      .select('value')
+                                      .eq('internship_id', internship.id)
+                                      .eq('column_id', column.id)
+                                      .single();
+                                    
+                                    return (
+                                      <React.Suspense fallback={<span className="text-gray-400">Loading...</span>}>
+                                        <DynamicColumnValue valuePromise={valuePromise} />
+                                      </React.Suspense>
+                                    );
+                                  })()
                                 }
-                              }}
-                            />
-                          ) : (
-                            <Input 
-                              value={cellValue} 
-                              onChange={(e) => handleDynamicCellEdit(internship.id, column.id, e.target.value)}
-                            />
-                          )
-                        ) : column.type === 'file' && cellValue ? (
-                          <a href={cellValue} target="_blank" rel="noopener noreferrer">
-                            <File className="h-5 w-5 text-blue-500" />
-                          </a>
-                        ) : (
-                          cellValue
-                        )}
-                      </TableCell>
-                    );
-                  })}
+                              </div>
+                            );
+                          }
+                        })()
+                      }
+                    </TableCell>
+                  ))}
                   
                   <TableCell>
-                    <div className="flex space-x-2">
-                      {editingInternship?.id === internship.id ? (
-                        <Button size="sm" onClick={handleSaveEdit}>Save</Button>
-                      ) : (
-                        <>
-                          <Button size="sm" variant="outline" onClick={() => handleEdit(internship)}>
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button size="sm" variant="outline" className="text-red-500" onClick={() => handleDelete(internship.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </>
-                      )}
-                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDelete(internship.id)}
+                      className="text-destructive hover:text-destructive/90 hover:bg-destructive/10"
+                    >
+                      <Trash2 size={16} />
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))
             )}
           </TableBody>
         </Table>
-      </Card>
+      </div>
       
-      {/* Pagination */}
+      {/* Pagination controls */}
       {internships.length > 0 && (
-        <div className="flex flex-col md:flex-row justify-between items-center">
-          <div className="mb-4 md:mb-0">
-            <Select 
-              value={itemsPerPage.toString()} 
-              onValueChange={(value) => {
-                setItemsPerPage(parseInt(value));
-                setCurrentPage(1);
-              }}
+        <div className="flex items-center justify-between mt-4">
+          <div>
+            <span className="text-sm text-gray-700">
+              Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, internships.length)} of {internships.length} entries
+            </span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={prevPage}
+              disabled={currentPage === 1}
+              className="flex items-center gap-1"
             >
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Rows per page" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="5">5 per page</SelectItem>
-                <SelectItem value="10">10 per page</SelectItem>
-                <SelectItem value="25">25 per page</SelectItem>
-                <SelectItem value="50">50 per page</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          
-          <Pagination>
-            <PaginationContent>
-              <PaginationItem>
-                <PaginationPrevious 
-                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                  disabled={currentPage === 1}
-                />
-              </PaginationItem>
-              
-              {pageButtons}
-              
-              <PaginationItem>
-                <PaginationNext 
-                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                  disabled={currentPage === totalPages}
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
-        </div>
-      )}
-      
-      {/* Add new column dialog */}
-      <Dialog open={isNewColumnDialogOpen} onOpenChange={setIsNewColumnDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add New Column</DialogTitle>
-            <DialogDescription>
-              Add a new column to track additional internship information.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="columnName">Column Name</Label>
-              <Input
-                id="columnName"
-                value={newColumnName}
-                onChange={(e) => setNewColumnName(e.target.value)}
-                placeholder="Enter column name"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="columnType">Column Type</Label>
-              <Select value={newColumnType} onValueChange={setNewColumnType}>
-                <SelectTrigger id="columnType">
-                  <SelectValue placeholder="Select column type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="text">Text</SelectItem>
-                  <SelectItem value="number">Number</SelectItem>
-                  <SelectItem value="date">Date</SelectItem>
-                  <SelectItem value="file">File</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsNewColumnDialogOpen(false)}>
-              Cancel
+              <ArrowLeft size={16} />
+              Previous
             </Button>
-            <Button onClick={handleAddColumn}>Add Column</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      
-      {/* Import Excel dialog */}
-      <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Import Excel Data</DialogTitle>
-            <DialogDescription>
-              Upload an Excel file with internship data to import.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="excelFile">Excel File</Label>
-              <Input
-                id="excelFile"
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-              />
-            </div>
             
-            <div className="space-y-2">
-              <Label htmlFor="facultyCoordinator">Faculty Coordinator</Label>
-              <Select 
-                value={importFilters.faculty_coordinator}
-                onValueChange={(value) => setImportFilters({...importFilters, faculty_coordinator: value})}
-              >
-                <SelectTrigger id="facultyCoordinator">
-                  <SelectValue placeholder="Select faculty coordinator" />
-                </SelectTrigger>
-                <SelectContent>
-                  {facultyCoordinatorOptions.map(option => (
-                    <SelectItem key={option} value={option}>{option}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsImportDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleExcelImport}>Import Data</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      
-      {/* Add new internship dialog */}
-      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Add New Internship</DialogTitle>
-            <DialogDescription>
-              Enter the details for the new internship.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="rollNo">Roll No *</Label>
-              <Input
-                id="rollNo"
-                value={newInternship.roll_no || ''}
-                onChange={(e) => setNewInternship({...newInternship, roll_no: e.target.value})}
-                placeholder="Enter roll number"
-                required
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="name">Name *</Label>
-              <Input
-                id="name"
-                value={newInternship.name || ''}
-                onChange={(e) => setNewInternship({...newInternship, name: e.target.value})}
-                placeholder="Enter student name"
-                required
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                value={newInternship.email || ''}
-                onChange={(e) => setNewInternship({...newInternship, email: e.target.value})}
-                placeholder="Enter email address"
-                type="email"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="phoneNo">Phone No</Label>
-              <Input
-                id="phoneNo"
-                value={newInternship.phone_no || ''}
-                onChange={(e) => setNewInternship({...newInternship, phone_no: e.target.value})}
-                placeholder="Enter phone number"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="program">Program</Label>
-              <Select 
-                value={newInternship.program || ''}
-                onValueChange={(value) => setNewInternship({...newInternship, program: value})}
-              >
-                <SelectTrigger id="program">
-                  <SelectValue placeholder="Select program" />
-                </SelectTrigger>
-                <SelectContent>
-                  {programOptions.map(option => (
-                    <SelectItem key={option} value={option}>{option}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="domain">Domain</Label>
-              <Input
-                id="domain"
-                value={newInternship.domain || ''}
-                onChange={(e) => setNewInternship({...newInternship, domain: e.target.value})}
-                placeholder="Enter domain"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="session">Session</Label>
-              <Input
-                id="session"
-                value={newInternship.session || ''}
-                onChange={(e) => setNewInternship({...newInternship, session: e.target.value})}
-                placeholder="Enter session"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="year">Year</Label>
-              <Input
-                id="year"
-                value={newInternship.year || ''}
-                onChange={(e) => setNewInternship({...newInternship, year: e.target.value})}
-                placeholder="Enter year"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="semester">Semester</Label>
-              <Input
-                id="semester"
-                value={newInternship.semester || ''}
-                onChange={(e) => setNewInternship({...newInternship, semester: e.target.value})}
-                placeholder="Enter semester"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="organization">Organization Name</Label>
-              <Input
-                id="organization"
-                value={newInternship.organization_name || ''}
-                onChange={(e) => setNewInternship({...newInternship, organization_name: e.target.value})}
-                placeholder="Enter organization name"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="position">Position</Label>
-              <Input
-                id="position"
-                value={newInternship.position || ''}
-                onChange={(e) => setNewInternship({...newInternship, position: e.target.value})}
-                placeholder="Enter position"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="startDate">Start Date</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-full justify-start text-left font-normal">
-                    {displayStartDate || 'Select date'}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={displayStartDate ? new Date(parseDisplayDate(displayStartDate)) : undefined}
-                    onSelect={(date) => {
-                      if (date) {
-                        const formatted = format(date, 'dd-MM-yyyy');
-                        setDisplayStartDate(formatted);
-                      }
-                    }}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="endDate">End Date</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-full justify-start text-left font-normal">
-                    {displayEndDate || 'Select date'}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={displayEndDate ? new Date(parseDisplayDate(displayEndDate)) : undefined}
-                    onSelect={(date) => {
-                      if (date) {
-                        const formatted = format(date, 'dd-MM-yyyy');
-                        setDisplayEndDate(formatted);
-                      }
-                    }}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="facultyCoordinator">Faculty Coordinator</Label>
-              <Select 
-                value={newInternship.faculty_coordinator || ''}
-                onValueChange={(value) => setNewInternship({...newInternship, faculty_coordinator: value})}
-              >
-                <SelectTrigger id="facultyCoordinator">
-                  <SelectValue placeholder="Select faculty coordinator" />
-                </SelectTrigger>
-                <SelectContent>
-                  {facultyCoordinatorOptions.map(option => (
-                    <SelectItem key={option} value={option}>{option}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleAddInternship}>Add Internship</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-};
-
-export default InternshipTable;
+            <
