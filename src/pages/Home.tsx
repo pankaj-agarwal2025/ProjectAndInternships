@@ -39,13 +39,13 @@ const Home = () => {
     },
     {
       title: 'Internship Portal',
-      description: 'Coming soon - Manage student internships, industry connections, and job placements.',
-      link: '#',
-      color: 'bg-gray-100',
-      borderColor: 'border-gray-200',
-      textColor: 'text-gray-500',
+      description: 'Manage student internships, track details, upload offer letters, and generate reports.',
+      link: '/internship-portal',
+      color: 'bg-secondary/10',
+      borderColor: 'border-secondary/20',
+      textColor: 'text-secondary',
       icon: '🏢',
-      disabled: true
+      disabled: false
     }
   ];
   
@@ -111,7 +111,7 @@ const Home = () => {
                         Coming Soon
                       </Button>
                     ) : (
-                      <Button className="w-full bg-primary hover:bg-primary-dark" asChild>
+                      <Button className={`w-full ${index === 0 ? 'bg-primary hover:bg-primary-dark' : 'bg-secondary hover:bg-secondary-dark'}`} asChild>
                         <Link to={card.link}>Access Portal</Link>
                       </Button>
                     )}

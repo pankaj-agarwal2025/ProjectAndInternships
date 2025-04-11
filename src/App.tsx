@@ -8,6 +8,7 @@ import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
 import ProjectPortal from "./pages/ProjectPortal";
+import InternshipPortal from "./pages/InternshipPortal";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -23,6 +24,7 @@ const App = () => (
           <Route path="/login" element={<Login />} />
           <Route path="/home" element={<Home />} />
           <Route path="/project-portal" element={<ProjectPortal />} />
+          <Route path="/internship-portal" element={<InternshipPortal />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

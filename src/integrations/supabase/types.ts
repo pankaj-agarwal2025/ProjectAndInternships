@@ -9,7 +9,314 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      dynamic_column_values: {
+        Row: {
+          column_id: string | null
+          created_at: string
+          id: string
+          project_id: string | null
+          value: string | null
+        }
+        Insert: {
+          column_id?: string | null
+          created_at?: string
+          id?: string
+          project_id?: string | null
+          value?: string | null
+        }
+        Update: {
+          column_id?: string | null
+          created_at?: string
+          id?: string
+          project_id?: string | null
+          value?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dynamic_column_values_column_id_fkey"
+            columns: ["column_id"]
+            isOneToOne: false
+            referencedRelation: "dynamic_columns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dynamic_column_values_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dynamic_columns: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          type: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          type: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          type?: string
+        }
+        Relationships: []
+      }
+      faculties: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          password: string
+          username: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          password: string
+          username: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          password?: string
+          username?: string
+        }
+        Relationships: []
+      }
+      internship_dynamic_column_values: {
+        Row: {
+          column_id: string | null
+          created_at: string
+          id: string
+          internship_id: string | null
+          value: string | null
+        }
+        Insert: {
+          column_id?: string | null
+          created_at?: string
+          id?: string
+          internship_id?: string | null
+          value?: string | null
+        }
+        Update: {
+          column_id?: string | null
+          created_at?: string
+          id?: string
+          internship_id?: string | null
+          value?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "internship_dynamic_column_values_column_id_fkey"
+            columns: ["column_id"]
+            isOneToOne: false
+            referencedRelation: "internship_dynamic_columns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "internship_dynamic_column_values_internship_id_fkey"
+            columns: ["internship_id"]
+            isOneToOne: false
+            referencedRelation: "internships"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      internship_dynamic_columns: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          type: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          type: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          type?: string
+        }
+        Relationships: []
+      }
+      internships: {
+        Row: {
+          created_at: string
+          domain: string | null
+          email: string | null
+          ending_date: string | null
+          faculty_coordinator: string | null
+          id: string
+          internship_duration: number | null
+          name: string
+          noc_url: string | null
+          offer_letter_url: string | null
+          organization_name: string | null
+          phone_no: string | null
+          position: string | null
+          ppo_url: string | null
+          program: string | null
+          roll_no: string
+          semester: string | null
+          session: string | null
+          starting_date: string | null
+          updated_at: string
+          year: string | null
+        }
+        Insert: {
+          created_at?: string
+          domain?: string | null
+          email?: string | null
+          ending_date?: string | null
+          faculty_coordinator?: string | null
+          id?: string
+          internship_duration?: number | null
+          name: string
+          noc_url?: string | null
+          offer_letter_url?: string | null
+          organization_name?: string | null
+          phone_no?: string | null
+          position?: string | null
+          ppo_url?: string | null
+          program?: string | null
+          roll_no: string
+          semester?: string | null
+          session?: string | null
+          starting_date?: string | null
+          updated_at?: string
+          year?: string | null
+        }
+        Update: {
+          created_at?: string
+          domain?: string | null
+          email?: string | null
+          ending_date?: string | null
+          faculty_coordinator?: string | null
+          id?: string
+          internship_duration?: number | null
+          name?: string
+          noc_url?: string | null
+          offer_letter_url?: string | null
+          organization_name?: string | null
+          phone_no?: string | null
+          position?: string | null
+          ppo_url?: string | null
+          program?: string | null
+          roll_no?: string
+          semester?: string | null
+          session?: string | null
+          starting_date?: string | null
+          updated_at?: string
+          year?: string | null
+        }
+        Relationships: []
+      }
+      projects: {
+        Row: {
+          created_at: string
+          domain: string | null
+          faculty_coordinator: string | null
+          faculty_mentor: string | null
+          group_no: string
+          id: string
+          industry_mentor: string | null
+          presentation_url: string | null
+          progress_form_url: string | null
+          report_url: string | null
+          semester: string | null
+          session: string | null
+          title: string
+          updated_at: string
+          year: string | null
+        }
+        Insert: {
+          created_at?: string
+          domain?: string | null
+          faculty_coordinator?: string | null
+          faculty_mentor?: string | null
+          group_no: string
+          id?: string
+          industry_mentor?: string | null
+          presentation_url?: string | null
+          progress_form_url?: string | null
+          report_url?: string | null
+          semester?: string | null
+          session?: string | null
+          title: string
+          updated_at?: string
+          year?: string | null
+        }
+        Update: {
+          created_at?: string
+          domain?: string | null
+          faculty_coordinator?: string | null
+          faculty_mentor?: string | null
+          group_no?: string
+          id?: string
+          industry_mentor?: string | null
+          presentation_url?: string | null
+          progress_form_url?: string | null
+          report_url?: string | null
+          semester?: string | null
+          session?: string | null
+          title?: string
+          updated_at?: string
+          year?: string | null
+        }
+        Relationships: []
+      }
+      students: {
+        Row: {
+          created_at: string
+          email: string | null
+          group_id: string | null
+          id: string
+          name: string
+          program: string | null
+          roll_no: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          group_id?: string | null
+          id?: string
+          name: string
+          program?: string | null
+          roll_no: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          group_id?: string | null
+          id?: string
+          name?: string
+          program?: string | null
+          roll_no?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "students_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

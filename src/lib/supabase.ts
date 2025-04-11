@@ -1,8 +1,8 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = 'https://gjhwggkmrqwskexdnmif.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdqaHdnZ2ttcnF3c2tleGRubWlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM5MTEyMzcsImV4cCI6MjA1OTQ4NzIzN30.IhfTFlQ_keri5dobHKlM3M-9BCeHxz8Xwo7iAGyb1SA';
+const supabaseUrl = 'https://ihxuclygrdbdsppjmrpf.supabase.co';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImloeHVjbHlncmRiZHNwcGptcnBmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQzODg5NDEsImV4cCI6MjA1OTk2NDk0MX0.94-dWkWOjh4hAENGAGtlQD0E-hQNNu0IBldk9H4lkQ0';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
@@ -38,6 +38,30 @@ export interface Student {
   name: string;
   email: string;
   program: string;
+}
+
+export interface Internship {
+  id: string;
+  roll_no: string;
+  name: string;
+  email: string;
+  phone_no: string;
+  domain: string;
+  session: string;
+  year: string;
+  semester: string;
+  program: string;
+  organization_name: string;
+  starting_date: string;
+  ending_date: string;
+  internship_duration: number;
+  position: string;
+  offer_letter_url?: string;
+  noc_url?: string;
+  ppo_url?: string;
+  faculty_coordinator: string;
+  created_at: string;
+  updated_at: string;
 }
 
 // Function to create the necessary tables in Supabase if they don't exist
@@ -78,6 +102,15 @@ export async function setupDatabase() {
     
     if (dynamicColumnsError) {
       console.error('Error checking dynamic_columns table:', dynamicColumnsError);
+    }
+
+    const { data: internships, error: internshipsError } = await supabase
+      .from('internships')
+      .select('id')
+      .limit(1);
+    
+    if (internshipsError) {
+      console.error('Error checking internships table:', internshipsError);
     }
 
     // Add default faculty users
@@ -388,5 +421,247 @@ export async function getDynamicColumnValues(projectId: string) {
   } catch (error) {
     console.error('Error fetching dynamic column values:', error);
     return [];
+  }
+}
+
+// Internship Portal Functions
+
+// Get all internships with filtering options
+export async function getInternships(filters?: Record<string, any>) {
+  try {
+    let query = supabase.from('internships').select('*');
+    
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value) {
+          query = query.eq(key, value);
+        }
+      });
+    }
+    
+    const { data, error } = await query;
+    
+    if (error) {
+      console.error('Error fetching internships:', error);
+      return [];
+    }
+    
+    return data as Internship[];
+  } catch (error) {
+    console.error('Error fetching internships:', error);
+    return [];
+  }
+}
+
+// Add a new internship
+export async function addInternship(internship: Omit<Internship, 'id' | 'created_at' | 'updated_at' | 'internship_duration'>) {
+  try {
+    const { data, error } = await supabase
+      .from('internships')
+      .insert(internship)
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('Error adding internship:', error);
+      return null;
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Error adding internship:', error);
+    return null;
+  }
+}
+
+// Update an internship
+export async function updateInternship(id: string, updates: Partial<Internship>) {
+  try {
+    const { data, error } = await supabase
+      .from('internships')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('Error updating internship:', error);
+      return null;
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Error updating internship:', error);
+    return null;
+  }
+}
+
+// Delete an internship
+export async function deleteInternship(id: string) {
+  try {
+    const { error } = await supabase
+      .from('internships')
+      .delete()
+      .eq('id', id);
+    
+    if (error) {
+      console.error('Error deleting internship:', error);
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error deleting internship:', error);
+    return false;
+  }
+}
+
+// Add a dynamic column for internships
+export async function addInternshipDynamicColumn(name: string, type: string) {
+  try {
+    const { data, error } = await supabase
+      .from('internship_dynamic_columns')
+      .insert({ name, type })
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('Error adding internship dynamic column:', error);
+      return null;
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Error adding internship dynamic column:', error);
+    return null;
+  }
+}
+
+// Get all dynamic columns for internships
+export async function getInternshipDynamicColumns() {
+  try {
+    const { data, error } = await supabase
+      .from('internship_dynamic_columns')
+      .select('*');
+    
+    if (error) {
+      console.error('Error fetching internship dynamic columns:', error);
+      return [];
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Error fetching internship dynamic columns:', error);
+    return [];
+  }
+}
+
+// Add a dynamic column value for internships
+export async function addInternshipDynamicColumnValue(columnId: string, internshipId: string, value: any) {
+  try {
+    const { data, error } = await supabase
+      .from('internship_dynamic_column_values')
+      .insert({ column_id: columnId, internship_id: internshipId, value })
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('Error adding internship dynamic column value:', error);
+      return null;
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Error adding internship dynamic column value:', error);
+    return null;
+  }
+}
+
+// Get dynamic column values for an internship
+export async function getInternshipDynamicColumnValues(internshipId: string) {
+  try {
+    const { data, error } = await supabase
+      .from('internship_dynamic_column_values')
+      .select('*, internship_dynamic_columns(*)')
+      .eq('internship_id', internshipId);
+    
+    if (error) {
+      console.error('Error fetching internship dynamic column values:', error);
+      return [];
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Error fetching internship dynamic column values:', error);
+    return [];
+  }
+}
+
+// Format date for display (DD-MM-YYYY)
+export function formatDateForDisplay(dateString: string) {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  return `${date.getDate().toString().padStart(2, '0')}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getFullYear()}`;
+}
+
+// Parse display date to ISO format (YYYY-MM-DD)
+export function parseDisplayDate(displayDate: string) {
+  if (!displayDate) return '';
+  const [day, month, year] = displayDate.split('-').map(part => parseInt(part, 10));
+  return `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+}
+
+// Process Excel data for internships
+export async function processInternshipsExcel(excelData: any[], facultyCoordinator: string) {
+  try {
+    const processedData = excelData.map(row => {
+      // Convert display dates to ISO format
+      let startDate = row.starting_date;
+      let endDate = row.ending_date;
+      
+      if (typeof startDate === 'string' && startDate.includes('-')) {
+        startDate = parseDisplayDate(startDate);
+      }
+      
+      if (typeof endDate === 'string' && endDate.includes('-')) {
+        endDate = parseDisplayDate(endDate);
+      }
+      
+      return {
+        roll_no: row.roll_no || '',
+        name: row.name || '',
+        email: row.email || '',
+        phone_no: row.phone_no || '',
+        domain: row.domain || '',
+        session: row.session || '',
+        year: row.year || '',
+        semester: row.semester || '',
+        program: row.program || '',
+        organization_name: row.organization_name || '',
+        starting_date: startDate,
+        ending_date: endDate,
+        position: row.position || '',
+        offer_letter_url: row.offer_letter_url || '',
+        noc_url: row.noc_url || '',
+        ppo_url: row.ppo_url || '',
+        faculty_coordinator: facultyCoordinator
+      };
+    });
+    
+    // Insert processed data into database
+    const { data, error } = await supabase
+      .from('internships')
+      .insert(processedData)
+      .select();
+    
+    if (error) {
+      console.error('Error inserting excel data:', error);
+      return null;
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Error processing excel data:', error);
+    return null;
   }
 }
