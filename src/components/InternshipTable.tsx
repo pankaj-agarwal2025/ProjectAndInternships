@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, Suspense } from 'react';
 import { 
   Table, 
   TableHeader, 
@@ -49,6 +50,26 @@ interface DynamicColumn {
   name: string;
   type: string;
 }
+
+// Component to display dynamic column values
+const DynamicColumnValue = ({ valuePromise }: { valuePromise: Promise<any> }) => {
+  const [value, setValue] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    valuePromise.then(({ data, error }) => {
+      setIsLoading(false);
+      if (error) {
+        console.error('Error fetching dynamic column value:', error);
+        return;
+      }
+      setValue(data?.value || '');
+    });
+  }, [valuePromise]);
+
+  if (isLoading) return <span className="text-gray-400">Loading...</span>;
+  return <span>{value || 'Click to add'}</span>;
+};
 
 const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
   const [internships, setInternships] = useState<Internship[]>([]);
@@ -898,23 +919,16 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
                                     });
                                 }}
                               >
-                                {
-                                  (() => {
-                                    // Fetch existing value
-                                    const valuePromise = supabase
+                                <Suspense fallback={<span className="text-gray-400">Loading...</span>}>
+                                  <DynamicColumnValue 
+                                    valuePromise={supabase
                                       .from('internship_dynamic_column_values')
                                       .select('value')
                                       .eq('internship_id', internship.id)
                                       .eq('column_id', column.id)
-                                      .single();
-                                    
-                                    return (
-                                      <React.Suspense fallback={<span className="text-gray-400">Loading...</span>}>
-                                        <DynamicColumnValue valuePromise={valuePromise} />
-                                      </React.Suspense>
-                                    );
-                                  })()
-                                }
+                                      .single()} 
+                                  />
+                                </Suspense>
                               </div>
                             );
                           }
@@ -960,4 +974,51 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
               Previous
             </Button>
             
-            <
+            <div className="flex items-center space-x-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                // Show 5 pages at most centered around the current page
+                let pageNum = currentPage;
+                if (currentPage <= 3) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = currentPage - 2 + i;
+                }
+                
+                // Ensure pageNum is within valid range
+                if (pageNum > 0 && pageNum <= totalPages) {
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={pageNum === currentPage ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => paginate(pageNum)}
+                      className="w-8 h-8 p-0"
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                }
+                return null;
+              })}
+            </div>
+            
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={nextPage}
+              disabled={currentPage === totalPages}
+              className="flex items-center gap-1"
+            >
+              Next
+              <ArrowRight size={16} />
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default InternshipTable;
