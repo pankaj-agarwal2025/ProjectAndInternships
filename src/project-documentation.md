@@ -1,115 +1,84 @@
 
-# Project-Internship Management Portal Documentation
+# Project Portal and Internship Management System
 
-This document provides an overview of the code files in the project and explains their functions and data flow.
+## Overview
+This application is designed to help faculty members manage student projects and internships at K.R. Mangalam University. It provides a centralized platform for tracking, updating, and analyzing student progress.
 
-## Database Structure
+## File Structure and Functionality
 
-The application uses Supabase as its backend with the following tables:
+### Main Application Files
 
-1. **faculties**: Stores faculty information for authentication
-2. **projects**: Stores project information including title, domain, faculty mentor, etc.
-3. **students**: Stores student information linked to projects
-4. **dynamic_columns**: Stores dynamic columns that can be added by teachers
-5. **dynamic_column_values**: Stores values for dynamic columns per project
-6. **internships**: Stores internship information like roll number, name, organization, etc.
-7. **internship_dynamic_columns**: Stores dynamic columns for internships
-8. **internship_dynamic_column_values**: Stores values for dynamic internship columns
-
-## File Structure
-
-### Core Files
-
-1. **App.tsx**: Main application component that sets up routing and providers
-2. **index.css**: Global styles using Tailwind CSS
-3. **main.tsx**: Entry point that mounts the application
+- **src/App.tsx**: Main application component that sets up routing and global providers for the application.
+- **src/main.tsx**: Entry point of the application, sets up React rendering.
 
 ### Pages
 
-1. **pages/Login.tsx**: Login page for faculty authentication
-2. **pages/Home.tsx**: Dashboard with links to Project and Internship portals
-3. **pages/ProjectPortal.tsx**: Main page for the Project Portal
-4. **pages/InternshipPortal.tsx**: Main page for the Internship Portal
-5. **pages/Landing.tsx**: Landing page for unauthenticated users
-6. **pages/NotFound.tsx**: 404 page for invalid routes
+- **src/pages/Landing.tsx**: Landing page for the application with links to login.
+- **src/pages/Login.tsx**: Handles faculty authentication using username/password against the Supabase database.
+- **src/pages/Home.tsx**: Dashboard after login, showing navigation to different portals.
+- **src/pages/ProjectPortal.tsx**: Interface for managing student projects, groups, and related documents.
+- **src/pages/InternshipPortal.tsx**: Interface for managing student internships, including organization details and related documents.
+- **src/pages/NotFound.tsx**: 404 page for invalid routes.
 
 ### Components
 
-#### Project Portal Components
+- **src/components/Navbar.tsx**: Navigation bar shown across pages after login.
+- **src/components/ProjectTable.tsx**: Displays and manages the projects data table with CRUD functionality.
+- **src/components/ProjectFilters.tsx**: Filtering controls for the projects table.
+- **src/components/InternshipTable.tsx**: Displays and manages the internships data table with CRUD functionality.
+- **src/components/InternshipFilters.tsx**: Filtering controls for the internships table.
+- **src/components/AddProjectModal.tsx**: Modal for adding new projects.
+- **src/components/ImportExcelModal.tsx**: Modal for importing data from Excel sheets.
 
-1. **components/ProjectTable.tsx**: Table for displaying and managing projects
-2. **components/ProjectFilters.tsx**: Filters for the project table
-3. **components/AddProjectModal.tsx**: Modal for adding new projects
-4. **components/ImportExcelModal.tsx**: Modal for importing projects from Excel
+### Supabase Integration
 
-#### Internship Portal Components
+- **src/integrations/supabase/client.ts**: Sets up the Supabase client with the project URL and anonymous key.
+- **src/integrations/supabase/types.ts**: TypeScript definitions for the Supabase database tables.
+- **src/lib/supabase.ts**: Utility functions for interacting with Supabase, including CRUD operations for projects, students, internships, and file handling.
 
-1. **components/InternshipTable.tsx**: Table for displaying and managing internships
-2. **components/InternshipFilters.tsx**: Filters for the internship table
+### UI Components
 
-#### Common Components
-
-1. **components/Navbar.tsx**: Navigation bar used across the application
-2. **components/ui/**: Various UI components from shadcn/ui library
-
-### Utilities
-
-1. **lib/supabase.ts**: Functions for interacting with Supabase
-2. **lib/utils.ts**: Utility functions used throughout the application
-3. **integrations/supabase/client.ts**: Supabase client configuration
+- **src/components/ui/**: Contains reusable UI components (buttons, cards, toasts, etc.) based on shadcn/ui.
 
 ## Data Flow
 
-### Authentication Flow
+1. **Authentication Flow**:
+   - User enters credentials in the Login page
+   - Credentials are validated against the faculties table in Supabase
+   - On successful login, user data is stored in sessionStorage and redirected to Home
+   - Navigation guards check for authenticated sessions before allowing access to protected routes
 
-1. User enters credentials in Login.tsx
-2. loginFaculty() in supabase.ts validates credentials
-3. On success, faculty data is stored in sessionStorage
-4. User is redirected to Home.tsx
+2. **Project Portal Flow**:
+   - Projects and related student data are fetched from Supabase
+   - Users can filter, add, edit, and delete projects
+   - Files (progress forms, presentations, reports) can be uploaded to Supabase storage
+   - Dynamic columns can be added to extend the data model
 
-### Project Portal Flow
+3. **Internship Portal Flow**:
+   - Internship data is fetched from Supabase
+   - Users can filter, add, edit, and delete internship records
+   - File uploads (offer letters, NOCs, PPOs) are stored in Supabase storage
+   - Excel imports process data and update the database
+   - Excel exports generate downloadable files from the current data
+   - Internship duration is automatically calculated from start/end dates
 
-1. ProjectPortal.tsx loads and checks authentication
-2. ProjectFilters.tsx allows filtering projects
-3. ProjectTable.tsx fetches and displays projects
-4. AddProjectModal.tsx allows adding new projects
-5. ImportExcelModal.tsx allows importing projects from Excel
+4. **Data Storage**:
+   - All persistent data is stored in Supabase tables
+   - Files are stored in Supabase storage buckets
+   - Dynamic columns are stored in separate tables and linked to main entities
 
-### Internship Portal Flow
+## Login Credentials
 
-1. InternshipPortal.tsx loads and checks authentication
-2. InternshipFilters.tsx allows filtering internships
-3. InternshipTable.tsx fetches and displays internships
-4. Supports adding, editing, and deleting internships
-5. Supports dynamic columns and file uploads
-6. Allows importing/exporting Excel data
-
-## Functionality Overview
-
-### Project Portal Features
-
-- CRUD operations for projects
-- Student group management
-- Dynamic columns for custom evaluation parameters
-- File uploads for documents
-- Excel import/export
-
-### Internship Portal Features
-
-- CRUD operations for internships
-- Dynamic columns for custom fields
-- File uploads for offer letters, NOCs, and PPOs
-- Date handling with automatic duration calculation
-- Excel import/export
-
-### Authentication
-
-- Simple username/password authentication for faculty
-- Session management using sessionStorage
-
-## Default Login Credentials
-
+Default faculty accounts:
 - Username: dr.pankaj, Password: password
 - Username: dr.anshu, Password: password
 - Username: dr.meenu, Password: password
 - Username: dr.swati, Password: password
+
+## Technical Notes
+
+- This application uses React Router for navigation
+- State management is primarily handled through React Query and local React state
+- UI is built with Tailwind CSS and shadcn/ui components
+- File uploads and storage use Supabase storage
+- Excel imports/exports use the XLSX library

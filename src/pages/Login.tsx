@@ -7,12 +7,14 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
-import { loginFaculty } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
+import { X } from 'lucide-react';
 
 const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [errorVisible, setErrorVisible] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -31,24 +33,34 @@ const Login = () => {
     setIsLoading(true);
     
     try {
-      const faculty = await loginFaculty(username, password);
+      // Directly query the faculties table to check credentials
+      const { data, error } = await supabase
+        .from('faculties')
+        .select('*')
+        .eq('username', username)
+        .eq('password', password)
+        .single();
       
-      if (faculty) {
-        // Store faculty info in session storage
-        sessionStorage.setItem('faculty', JSON.stringify(faculty));
+      if (error || !data) {
+        console.error('Login error:', error);
+        setErrorVisible(true);
+        setTimeout(() => setErrorVisible(false), 5000);
         
-        toast({
-          title: 'Login Successful',
-          description: `Welcome, ${faculty.name}!`,
-        });
-        
-        navigate('/home');
-      } else {
         toast({
           title: 'Login Failed',
           description: 'Invalid username or password. Please try again.',
           variant: 'destructive',
         });
+      } else {
+        // Store faculty info in session storage
+        sessionStorage.setItem('faculty', JSON.stringify(data));
+        
+        toast({
+          title: 'Login Successful',
+          description: `Welcome, ${data.name}!`,
+        });
+        
+        navigate('/home');
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -117,6 +129,19 @@ const Login = () => {
           </CardFooter>
         </Card>
       </motion.div>
+      
+      {/* Error Toast */}
+      {errorVisible && (
+        <div className="fixed bottom-4 right-4 bg-destructive text-white p-4 rounded-md shadow-lg flex items-center gap-2 max-w-sm">
+          <div className="flex-1">
+            <h4 className="font-semibold">Login Failed</h4>
+            <p className="text-sm">Invalid username or password. Please try again.</p>
+          </div>
+          <button onClick={() => setErrorVisible(false)} className="text-white">
+            <X size={18} />
+          </button>
+        </div>
+      )}
     </div>
   );
 };
