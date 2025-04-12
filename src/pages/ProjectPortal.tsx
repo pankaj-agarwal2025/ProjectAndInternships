@@ -9,7 +9,7 @@ import AddProjectModal from '@/components/AddProjectModal';
 import ImportExcelModal from '@/components/ImportExcelModal';
 import { Faculty, setupDatabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
-import { FilePlus2, Download } from 'lucide-react';
+import { FilePlus2, Download, FileText } from 'lucide-react';
 
 const ProjectPortal = () => {
   const navigate = useNavigate();
@@ -112,6 +112,20 @@ const ProjectPortal = () => {
             >
               <Download className="mr-2 h-4 w-4" />
               Add New Project
+            </Button>
+            <Button
+              variant="outline"
+              className="flex items-center"
+              onClick={() => {
+                // The export to PDF functionality is implemented in the ProjectTable component
+                const exportButton = document.querySelector('[data-export-pdf-button]');
+                if (exportButton) {
+                  (exportButton as HTMLButtonElement).click();
+                }
+              }}
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              Export PDF
             </Button>
           </div>
         </div>

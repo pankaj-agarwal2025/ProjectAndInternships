@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Calendar } from '@/components/ui/calendar';
-import { format } from 'date-fns';
+import { format, differenceInMonths, differenceInDays } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { 
   Calendar as CalendarIcon, 
@@ -22,14 +22,18 @@ import {
   ArrowRight, 
   Save,
   Download,
-  FileUp
+  FileUp,
+  Pencil,
+  Link as LinkIcon,
+  Edit
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import * as XLSX from 'xlsx';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { jsPDF } from 'jspdf';
 // @ts-ignore - Missing types for jspdf-autotable
 import autoTable from 'jspdf-autotable';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
 interface InternshipTableProps {
   filters: Record<string, any>;
@@ -64,6 +68,7 @@ interface DynamicColumn {
   type: string;
 }
 
+// Component to display dynamic column values
 const DynamicColumnValue = ({ internshipId, columnId }: { internshipId: string, columnId: string }) => {
   const [value, setValue] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
@@ -114,6 +119,12 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filteredInternships, setFilteredInternships] = useState<Internship[]>([]);
+  const [fileDialogOpen, setFileDialogOpen] = useState(false);
+  const [currentFileField, setCurrentFileField] = useState<{ id: string, field: string } | null>(null);
+  const [fileUrl, setFileUrl] = useState('');
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
   
   // Program options
@@ -125,24 +136,73 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
   // Faculty coordinator options
   const facultyCoordinators = ['Dr. Pankaj', 'Dr. Anshu', 'Dr. Meenu', 'Dr. Swati'];
   
-  // Calculate total pages
-  const totalPages = Math.ceil(internships.length / itemsPerPage);
+  // Apply search filter whenever searchTerm changes
+  useEffect(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    
+    searchTimeoutRef.current = setTimeout(() => {
+      if (!searchTerm.trim()) {
+        setFilteredInternships(internships);
+        return;
+      }
+      
+      const lowerSearchTerm = searchTerm.toLowerCase();
+      const filtered = internships.filter(internship => {
+        return Object.entries(internship).some(([key, value]) => {
+          // Skip non-string fields or specific fields
+          if (
+            typeof value !== 'string' || 
+            key === 'id' || 
+            key === 'offer_letter_url' || 
+            key === 'noc_url' || 
+            key === 'ppo_url' || 
+            key === 'created_at' || 
+            key === 'updated_at'
+          ) {
+            return false;
+          }
+          
+          return value.toLowerCase().includes(lowerSearchTerm);
+        });
+      });
+      
+      setFilteredInternships(filtered);
+      setCurrentPage(1); // Reset to first page when searching
+    }, 300);
+    
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [searchTerm, internships]);
+  
+  // Calculate total pages based on filtered internships
+  const totalPages = Math.ceil(filteredInternships.length / itemsPerPage);
   
   // Get current items for pagination
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentInternships = internships.slice(indexOfFirstItem, indexOfLastItem);
+  const currentInternships = filteredInternships.slice(indexOfFirstItem, indexOfLastItem);
   
   useEffect(() => {
     fetchInternships();
     fetchDynamicColumns();
   }, [filters]);
   
+  useEffect(() => {
+    // Set initial filtered internships
+    setFilteredInternships(internships);
+  }, [internships]);
+  
   const fetchInternships = async () => {
     setLoading(true);
     try {
       let query = supabase.from('internships').select('*');
       
+      // Apply filters if they exist
       if (filters && Object.keys(filters).length > 0) {
         Object.entries(filters).forEach(([key, value]) => {
           if (value && key !== 'starting_month') {
@@ -150,6 +210,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
           }
         });
         
+        // Special handling for starting_month filter
         if (filters.starting_month) {
           query = query.ilike('starting_date', `%-${filters.starting_month}-%`);
         }
@@ -163,6 +224,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       }
       
       if (data) {
+        // Format dates for display (dd-mm-yyyy)
         const formattedData = data.map(internship => ({
           ...internship,
           starting_date: internship.starting_date ? formatDateForDisplay(internship.starting_date) : '',
@@ -170,6 +232,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         }));
         
         setInternships(formattedData);
+        setFilteredInternships(formattedData);
         setEditedCells({});
       }
     } catch (error) {
@@ -216,7 +279,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       return `${date.getDate().toString().padStart(2, '0')}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getFullYear()}`;
     } catch (e) {
       console.error("Error formatting date:", e);
-      return dateString;
+      return dateString; // Return original if error
     }
   };
   
@@ -227,7 +290,39 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       return `${year}-${month}-${day}`;
     } catch (e) {
       console.error("Error formatting date for DB:", e);
-      return dateString;
+      return dateString; // Return original if error
+    }
+  };
+  
+  const calculateDuration = (startDate: string, endDate: string) => {
+    if (!startDate || !endDate) return 'Ongoing';
+    
+    try {
+      const start = new Date(formatDateForDB(startDate) || '');
+      const end = new Date(formatDateForDB(endDate) || '');
+      
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        return '-';
+      }
+      
+      const months = differenceInMonths(end, start);
+      let days = differenceInDays(end, start) % 30;
+      
+      // Ensure we don't have negative days
+      if (days < 0) {
+        days += 30;
+      }
+      
+      if (months === 0) {
+        return `${days} days`;
+      } else if (days === 0) {
+        return `${months} months`;
+      } else {
+        return `${months} months, ${days} days`;
+      }
+    } catch (error) {
+      console.error('Error calculating duration:', error);
+      return '-';
     }
   };
   
@@ -243,11 +338,13 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
   const handleSaveAll = async () => {
     try {
       for (const [id, fields] of Object.entries(editedCells)) {
+        // Prepare data for update
         const updateData: Record<string, any> = {
           ...fields,
           updated_at: new Date().toISOString()
         };
         
+        // Format dates for database
         if (updateData.starting_date) {
           updateData.starting_date = formatDateForDB(updateData.starting_date);
         }
@@ -255,6 +352,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
           updateData.ending_date = formatDateForDB(updateData.ending_date);
         }
         
+        // Update internship in database
         const { error } = await supabase
           .from('internships')
           .update(updateData)
@@ -271,6 +369,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         }
       }
       
+      // Refresh data
       fetchInternships();
       
       toast({
@@ -278,6 +377,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         description: 'All changes saved successfully',
       });
       
+      // Clear edited cells
       setEditedCells({});
     } catch (error) {
       console.error('Error saving changes:', error);
@@ -295,12 +395,21 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     try {
       const { id, field } = editableCell;
       
+      // Update local edited cells state
       setEditedCells(prev => ({
         ...prev,
         [id]: { ...prev[id], [field]: newValue }
       }));
       
+      // Update local state immediately for better UX
       setInternships(internships.map(internship => 
+        internship.id === id 
+          ? { ...internship, [field]: newValue } 
+          : internship
+      ));
+      
+      // Also update filtered internships
+      setFilteredInternships(filteredInternships.map(internship => 
         internship.id === id 
           ? { ...internship, [field]: newValue } 
           : internship
@@ -342,7 +451,9 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         throw error;
       }
       
+      // Update local state
       setInternships(internships.filter(internship => internship.id !== deleteId));
+      setFilteredInternships(filteredInternships.filter(internship => internship.id !== deleteId));
       
       toast({
         title: 'Success',
@@ -414,6 +525,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
   
   const handleDynamicColumnValueChange = async (internshipId: string, columnId: string, value: string) => {
     try {
+      // Check if a value already exists
       const { data: existingValue, error: fetchError } = await supabase
         .from('internship_dynamic_column_values')
         .select('*')
@@ -421,12 +533,13 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         .eq('column_id', columnId)
         .single();
       
-      if (fetchError && fetchError.code !== 'PGRST116') {
+      if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 means no rows returned
         console.error('Error fetching dynamic column value:', fetchError);
         throw fetchError;
       }
       
       if (existingValue) {
+        // Update existing value
         const { error } = await supabase
           .from('internship_dynamic_column_values')
           .update({ value })
@@ -437,6 +550,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
           throw error;
         }
       } else {
+        // Insert new value
         const { error } = await supabase
           .from('internship_dynamic_column_values')
           .insert({
@@ -472,6 +586,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     const file = e.target.files[0];
     
     try {
+      // Upload file to Supabase storage
       const fileName = `${field}_${id}_${new Date().getTime()}`;
       const { data, error } = await supabase.storage
         .from('documents')
@@ -486,10 +601,12 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       }
       
       if (data) {
+        // Get public URL
         const { data: publicURLData } = supabase.storage
           .from('documents')
           .getPublicUrl(data.path);
         
+        // Update internship with file URL
         const { error: updateError } = await supabase
           .from('internships')
           .update({
@@ -503,7 +620,14 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
           throw updateError;
         }
         
+        // Update local state
         setInternships(internships.map(internship => 
+          internship.id === id 
+            ? { ...internship, [field]: publicURLData.publicUrl } 
+            : internship
+        ));
+        
+        setFilteredInternships(filteredInternships.map(internship => 
           internship.id === id 
             ? { ...internship, [field]: publicURLData.publicUrl } 
             : internship
@@ -524,6 +648,64 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     } finally {
       setFileUploading(null);
     }
+  };
+  
+  const handleFileUrlSave = async () => {
+    if (!currentFileField) return;
+    
+    try {
+      const { id, field } = currentFileField;
+      
+      // Update the database
+      const { error } = await supabase
+        .from('internships')
+        .update({
+          [field]: fileUrl,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+      
+      if (error) {
+        console.error('Error updating file URL:', error);
+        throw error;
+      }
+      
+      // Update local state
+      setInternships(internships.map(internship => 
+        internship.id === id 
+          ? { ...internship, [field]: fileUrl } 
+          : internship
+      ));
+      
+      setFilteredInternships(filteredInternships.map(internship => 
+        internship.id === id 
+          ? { ...internship, [field]: fileUrl } 
+          : internship
+      ));
+      
+      toast({
+        title: 'Success',
+        description: 'File URL updated successfully',
+      });
+      
+      // Close the dialog
+      setFileDialogOpen(false);
+      setCurrentFileField(null);
+      setFileUrl('');
+    } catch (error) {
+      console.error('Error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update file URL',
+        variant: 'destructive',
+      });
+    }
+  };
+  
+  const openUrlDialog = (id: string, field: string, currentUrl: string) => {
+    setCurrentFileField({ id, field });
+    setFileUrl(currentUrl || '');
+    setFileDialogOpen(true);
   };
   
   const handleAddInternship = async () => {
@@ -552,6 +734,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       }
       
       if (data && data.length > 0) {
+        // Format dates for display
         const newInternship = {
           ...data[0],
           starting_date: data[0].starting_date ? formatDateForDisplay(data[0].starting_date) : '',
@@ -559,6 +742,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         };
         
         setInternships([newInternship, ...internships]);
+        setFilteredInternships([newInternship, ...filteredInternships]);
         
         toast({
           title: 'Success',
@@ -577,14 +761,17 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
   
   const exportToExcel = () => {
     try {
+      // Create worksheet
       const worksheet = XLSX.utils.json_to_sheet(
         internships.map(internship => {
           const exportData: Record<string, any> = { ...internship };
           
+          // Remove unnecessary fields
           delete exportData.id;
           delete exportData.created_at;
           delete exportData.updated_at;
           
+          // Change starting_date and ending_date format
           if (exportData.starting_date) {
             const [day, month, year] = exportData.starting_date.split('-');
             exportData.starting_date = `${year}-${month}-${day}`;
@@ -595,7 +782,13 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
             exportData.ending_date = `${year}-${month}-${day}`;
           }
           
-          if (!exportData.ending_date) {
+          // Calculate duration in months and days
+          if (exportData.starting_date && exportData.ending_date) {
+            exportData.internship_duration = calculateDuration(
+              internship.starting_date,
+              internship.ending_date
+            );
+          } else {
             exportData.internship_duration = 'Ongoing';
           }
           
@@ -603,9 +796,11 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         })
       );
       
+      // Create workbook
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Internships');
       
+      // Export to file
       XLSX.writeFile(workbook, 'internships_data.xlsx');
       
       toast({
@@ -652,7 +847,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       const headers = ['Roll No', 'Name', 'Organization', 'Position', 'Program', 'Starting Date', 'Ending Date', 'Duration'];
       
       // Create table data
-      const data = internships.map(internship => [
+      const data = filteredInternships.map(internship => [
         internship.roll_no || '',
         internship.name || '',
         internship.organization_name || '',
@@ -660,7 +855,9 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         internship.program || '',
         internship.starting_date || '',
         internship.ending_date || '',
-        internship.ending_date ? (internship.internship_duration || '') : 'Ongoing'
+        internship.ending_date && internship.starting_date
+          ? calculateDuration(internship.starting_date, internship.ending_date)
+          : 'Ongoing'
       ]);
       
       // Generate table
@@ -704,22 +901,28 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         const data = new Uint8Array(e.target.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
         
+        // Get first worksheet
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         
+        // Convert to JSON
         const jsonData = XLSX.utils.sheet_to_json(worksheet);
         
+        // Track results
         let updated = 0;
         let inserted = 0;
         let errors = 0;
         
+        // Insert into database
         for (const row of jsonData) {
           try {
             const internshipData: Record<string, any> = {};
             
+            // Map Excel columns to database columns
             Object.entries(row).forEach(([key, value]) => {
               const dbKey = key.toLowerCase().replace(/\s+/g, '_');
               
+              // Handle different data types
               if (typeof value === 'string') {
                 internshipData[dbKey] = value;
               } else if (value instanceof Date) {
@@ -728,35 +931,44 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
                 internshipData[dbKey] = value;
               }
               
+              // Handle date fields
               if (dbKey === 'starting_date' || dbKey === 'ending_date') {
+                // Try to fix date format
                 if (typeof value === 'string') {
                   if (/^\d{2}-\d{2}-\d{4}$/.test(value)) {
+                    // If date is in dd-mm-yyyy format, convert to yyyy-mm-dd
                     const [day, month, year] = value.split('-');
                     internshipData[dbKey] = `${year}-${month}-${day}`;
                   } else if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+                    // Already in yyyy-mm-dd format
                     internshipData[dbKey] = value;
                   } else if (/^\d+$/.test(value.toString())) {
+                    // If date is in Excel serial number format
                     const excelSerialDate = parseInt(value.toString());
                     const jsDate = new Date(Math.floor((excelSerialDate - 25569) * 86400 * 1000));
                     internshipData[dbKey] = jsDate.toISOString().split('T')[0];
                   }
                 } else if (typeof value === 'number') {
+                  // If date is in Excel serial number format
                   const jsDate = new Date(Math.floor((value - 25569) * 86400 * 1000));
                   internshipData[dbKey] = jsDate.toISOString().split('T')[0];
                 }
               }
             });
             
-            if (internshipData.roll_no && internshipData.organization_name) {
+            // Check if this is an update or insert
+            if (internshipData.roll_no && internshipData.program) {
+              // First check if record exists
               const { data: existingData, error: queryError } = await supabase
                 .from('internships')
                 .select('id')
                 .eq('roll_no', internshipData.roll_no)
-                .eq('organization_name', internshipData.organization_name);
+                .eq('program', internshipData.program);
               
               if (queryError) throw queryError;
               
               if (existingData && existingData.length > 0) {
+                // Update existing record
                 const { error: updateError } = await supabase
                   .from('internships')
                   .update(internshipData)
@@ -765,6 +977,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
                 if (updateError) throw updateError;
                 updated++;
               } else {
+                // Insert new record
                 const { error: insertError } = await supabase
                   .from('internships')
                   .insert(internshipData);
@@ -773,6 +986,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
                 inserted++;
               }
             } else {
+              // Insert new record
               const { error: insertError } = await supabase
                 .from('internships')
                 .insert(internshipData);
@@ -791,6 +1005,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
           description: `${inserted} records added, ${updated} records updated, ${errors} errors encountered.`,
         });
         
+        // Refresh data
         fetchInternships();
       } catch (error) {
         console.error('Error importing Excel:', error);
@@ -805,13 +1020,16 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     reader.readAsArrayBuffer(file);
   };
   
+  // Calculate internship duration in months and days
   const getInternshipDuration = (internship: Internship) => {
-    if (!internship.ending_date) {
+    if (!internship.starting_date || !internship.ending_date) {
       return <span className="text-blue-500 font-medium">Ongoing</span>;
     }
-    return internship.internship_duration || '-';
+    
+    return calculateDuration(internship.starting_date, internship.ending_date);
   };
   
+  // Page navigation
   const nextPage = () => {
     if (currentPage < totalPages) {
       setCurrentPage(currentPage + 1);
@@ -919,37 +1137,57 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         return (
           <div className="flex items-center space-x-2">
             {valueToShow ? (
-              <a 
-                href={valueToShow} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-blue-500 hover:text-blue-700 flex items-center"
-              >
-                <FileText size={16} className="mr-1" />
-                View
-              </a>
-            ) : (
-              <div className="relative">
-                <input
-                  type="file"
-                  id={`file-upload-${internship.id}-${field}`}
-                  className="sr-only"
-                  onChange={(e) => handleFileUpload(e, internship.id, field)}
-                  accept=".pdf,.doc,.docx"
-                />
-                <label
-                  htmlFor={`file-upload-${internship.id}-${field}`}
-                  className={`cursor-pointer text-gray-500 hover:text-blue-500 flex items-center ${
-                    fileUploading && fileUploading.id === internship.id && fileUploading.field === field
-                      ? 'opacity-50 pointer-events-none'
-                      : ''
-                  }`}
+              <div className="flex items-center space-x-2">
+                <a 
+                  href={valueToShow} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-blue-500 hover:text-blue-700 flex items-center"
                 >
-                  <FileUp size={16} className="mr-1" />
-                  {fileUploading && fileUploading.id === internship.id && fileUploading.field === field
-                    ? 'Uploading...'
-                    : 'Upload'}
-                </label>
+                  <FileText size={16} className="mr-1" />
+                  View
+                </a>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 w-7 p-0"
+                  onClick={() => openUrlDialog(internship.id, field, valueToShow)}
+                >
+                  <Edit size={14} />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center space-x-2">
+                <div className="relative">
+                  <input
+                    type="file"
+                    id={`file-upload-${internship.id}-${field}`}
+                    className="sr-only"
+                    onChange={(e) => handleFileUpload(e, internship.id, field)}
+                    accept=".pdf,.doc,.docx"
+                  />
+                  <label
+                    htmlFor={`file-upload-${internship.id}-${field}`}
+                    className={`cursor-pointer text-gray-500 hover:text-blue-500 flex items-center ${
+                      fileUploading && fileUploading.id === internship.id && fileUploading.field === field
+                        ? 'opacity-50 pointer-events-none'
+                        : ''
+                    }`}
+                  >
+                    <FileUp size={16} className="mr-1" />
+                    {fileUploading && fileUploading.id === internship.id && fileUploading.field === field
+                      ? 'Uploading...'
+                      : 'Upload'}
+                  </label>
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 w-7 p-0"
+                  onClick={() => openUrlDialog(internship.id, field, '')}
+                >
+                  <LinkIcon size={14} />
+                </Button>
               </div>
             )}
           </div>
@@ -961,9 +1199,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       }
       
       if (field !== 'id' && 
-          field !== 'offer_letter_url' && 
-          field !== 'noc_url' && 
-          field !== 'ppo_url' && 
           field !== 'created_at' && 
           field !== 'updated_at') {
         return (
@@ -1002,6 +1237,20 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
           >
             + Add Column
           </Button>
+          
+          <div className="relative w-64">
+            <Input
+              placeholder="Search by name, roll no, or any field"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-8"
+            />
+            <div className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400">
+              <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M10 6.5C10 8.433 8.433 10 6.5 10C4.567 10 3 8.433 3 6.5C3 4.567 4.567 3 6.5 3C8.433 3 10 4.567 10 6.5ZM9.30884 10.0159C8.53901 10.6318 7.56251 11 6.5 11C4.01472 11 2 8.98528 2 6.5C2 4.01472 4.01472 2 6.5 2C8.98528 2 11 4.01472 11 6.5C11 7.56251 10.6318 8.53901 10.0159 9.30884L12.8536 12.1464C13.0488 12.3417 13.0488 12.6583 12.8536 12.8536C12.6583 13.0488 12.3417 13.0488 12.1464 12.8536L9.30884 10.0159Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd"></path>
+              </svg>
+            </div>
+          </div>
         </div>
         
         <div className="flex space-x-2">
@@ -1031,6 +1280,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
             size="sm"
             className="flex items-center"
             onClick={exportToPDF}
+            data-export-pdf
           >
             <FileText className="mr-1 h-4 w-4" />
             Export PDF
@@ -1086,9 +1336,12 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         <div className="text-center py-8">
           <div className="animate-pulse">Loading...</div>
         </div>
-      ) : internships.length === 0 ? (
+      ) : filteredInternships.length === 0 ? (
         <div className="text-center py-8 text-gray-500">
-          No internship data found. Add a new internship or import from Excel.
+          {searchTerm ? 
+            'No matching internships found. Try a different search term.' :
+            'No internship data found. Add a new internship or import from Excel.'
+          }
         </div>
       ) : (
         <>
@@ -1169,12 +1422,12 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
             </Table>
           </div>
           
-          {internships.length > itemsPerPage && (
-            <div className="flex justify-between items-center mt-4">
+          {filteredInternships.length > itemsPerPage && (
+            <div className="flex justify-between items-center mt-4 p-2">
               <div className="text-sm text-gray-600">
                 Showing {indexOfFirstItem + 1} to{' '}
-                {Math.min(indexOfLastItem, internships.length)} of{' '}
-                {internships.length} entries
+                {Math.min(indexOfLastItem, filteredInternships.length)} of{' '}
+                {filteredInternships.length} entries
               </div>
               <div className="flex items-center space-x-2">
                 <Button
@@ -1186,17 +1439,32 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
                   <ArrowLeft size={16} />
                 </Button>
                 <div className="flex space-x-1">
-                  {[...Array(totalPages)].map((_, i) => (
-                    <Button
-                      key={i}
-                      variant={currentPage === i + 1 ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => paginate(i + 1)}
-                      className="w-8 h-8 p-0"
-                    >
-                      {i + 1}
-                    </Button>
-                  ))}
+                  {Array.from({ length: Math.min(totalPages, 5) }).map((_, i) => {
+                    let pageNum = currentPage;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else {
+                      if (currentPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i;
+                      } else {
+                        pageNum = currentPage - 2 + i;
+                      }
+                    }
+                    
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={currentPage === pageNum ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => paginate(pageNum)}
+                        className="w-8 h-8 p-0"
+                      >
+                        {pageNum}
+                      </Button>
+                    );
+                  })}
                 </div>
                 <Button
                   variant="outline"
@@ -1212,6 +1480,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         </>
       )}
       
+      {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1225,6 +1494,31 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      
+      {/* File URL Dialog */}
+      <Dialog open={fileDialogOpen} onOpenChange={setFileDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Enter File URL</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              value={fileUrl}
+              onChange={(e) => setFileUrl(e.target.value)}
+              placeholder="https://example.com/file.pdf"
+              className="w-full"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFileDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleFileUrlSave}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

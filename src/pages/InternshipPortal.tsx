@@ -7,7 +7,7 @@ import InternshipTable from '@/components/InternshipTable';
 import InternshipFilters from '@/components/InternshipFilters';
 import { Faculty, setupDatabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
-import { PlusCircle, Database } from 'lucide-react';
+import { PlusCircle, Database, FileText, Download } from 'lucide-react';
 
 const InternshipPortal = () => {
   const navigate = useNavigate();
@@ -112,6 +112,20 @@ const InternshipPortal = () => {
             >
               <PlusCircle size={18} className="mr-2" />
               Add New Internship
+            </Button>
+            <Button
+              variant="outline"
+              className="flex items-center"
+              onClick={() => {
+                // The export to PDF functionality is in the InternshipTable component
+                const exportButton = document.querySelector('[data-export-pdf]');
+                if (exportButton) {
+                  (exportButton as HTMLButtonElement).click();
+                }
+              }}
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              Export PDF
             </Button>
           </div>
         </div>

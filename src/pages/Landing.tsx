@@ -12,11 +12,11 @@ const Landing = () => {
       <div 
         className="absolute inset-0 bg-cover bg-center z-0"
         style={{ 
-          backgroundImage: 'url("public/lovable-uploads/4dfe6fdf-a947-4949-8c4e-7043d7209ad0.png")',
+          backgroundImage: 'url("public/lovable-uploads/2b5366a7-4406-492a-bb07-04dd88fe5ea0.png")',
           backgroundSize: 'cover'
         }}
       >
-        <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/60 to-black/80"></div>
+        <div className="absolute inset-0 backdrop-blur-md bg-gradient-to-b from-black/70 via-black/50 to-black/70"></div>
       </div>
       
       {/* Header with Logo */}

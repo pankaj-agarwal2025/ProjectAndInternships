@@ -5,10 +5,15 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DownloadIcon, FileIcon, Pencil, Save, X } from 'lucide-react';
-import { getProjects, getStudentsByGroupId, updateProject, updateStudent, getDynamicColumns, getDynamicColumnValues, addDynamicColumnValue } from '@/lib/supabase';
+import { DownloadIcon, FileIcon, Pencil, Save, X, Trash2, FileUp, AlertTriangle } from 'lucide-react';
+import { getProjects, getStudentsByGroupId, updateProject, updateStudent, getDynamicColumns, getDynamicColumnValues, addDynamicColumnValue, deleteProject } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
 import * as XLSX from 'xlsx';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { jsPDF } from 'jspdf';
+// @ts-ignore - Missing types for jspdf-autotable
+import autoTable from 'jspdf-autotable';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 interface ProjectTableProps {
   filters: Record<string, any>;
@@ -28,6 +33,12 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
   const [editingCell, setEditingCell] = useState<{row: number, col: string, student?: number} | null>(null);
   const [editValue, setEditValue] = useState('');
   const [dynamicColumns, setDynamicColumns] = useState<any[]>([]);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteProjectId, setDeleteProjectId] = useState<string | null>(null);
+  const [showAddColumnModal, setShowAddColumnModal] = useState(false);
+  const [newColumnName, setNewColumnName] = useState('');
+  const [newColumnType, setNewColumnType] = useState('text');
+  const [fileUploading, setFileUploading] = useState<{row: number, col: string} | null>(null);
   const { toast } = useToast();
   
   // Standard columns
@@ -190,6 +201,147 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
     setEditingCell(null);
     setEditValue('');
   };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, rowIndex: number, colId: string) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    
+    const file = e.target.files[0];
+    setFileUploading({ row: rowIndex, col: colId });
+    
+    try {
+      const projectId = data[rowIndex].project.id;
+      const fileName = `${colId}_${projectId}_${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
+      
+      // Upload file to storage
+      const { data: fileData, error: uploadError } = await fetch('/api/upload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fileName,
+          contentType: file.type,
+        }),
+      }).then(res => res.json());
+      
+      if (uploadError) throw new Error(uploadError.message);
+      
+      // Upload the file to the presigned URL
+      await fetch(fileData.signedUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': file.type,
+        },
+        body: file,
+      });
+      
+      // Update the project with the file URL
+      const fileUrl = fileData.publicUrl;
+      await updateProject(projectId, { [colId]: fileUrl });
+      
+      // Update local state
+      const updatedData = [...data];
+      updatedData[rowIndex].project[colId] = fileUrl;
+      setData(updatedData);
+      
+      toast({
+        title: 'File Upload Successful',
+        description: 'The file has been uploaded successfully.',
+      });
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      toast({
+        title: 'Upload Error',
+        description: 'Failed to upload the file. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setFileUploading(null);
+    }
+  };
+  
+  const handleURLInput = async (rowIndex: number, colId: string) => {
+    setEditingCell({ row: rowIndex, col: colId });
+    setEditValue(data[rowIndex].project[colId] || '');
+  };
+  
+  const handleDeleteProject = (projectId: string) => {
+    setDeleteProjectId(projectId);
+    setDeleteConfirmOpen(true);
+  };
+  
+  const confirmDeleteProject = async () => {
+    if (!deleteProjectId) return;
+    
+    try {
+      await deleteProject(deleteProjectId);
+      
+      // Remove from local state
+      setData(data.filter(item => item.project.id !== deleteProjectId));
+      
+      toast({
+        title: 'Project Deleted',
+        description: 'The project has been deleted successfully.',
+      });
+    } catch (error) {
+      console.error('Error deleting project:', error);
+      toast({
+        title: 'Delete Error',
+        description: 'Failed to delete the project. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeleteConfirmOpen(false);
+      setDeleteProjectId(null);
+    }
+  };
+  
+  const handleAddColumn = async () => {
+    if (!newColumnName.trim()) {
+      toast({
+        title: 'Invalid Input',
+        description: 'Please enter a column name.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    try {
+      // Add dynamic column to database
+      const { data: newColumn, error } = await fetch('/api/add-dynamic-column', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: newColumnName,
+          type: newColumnType,
+        }),
+      }).then(res => res.json());
+      
+      if (error) throw new Error(error.message);
+      
+      // Update local state
+      setDynamicColumns([...dynamicColumns, newColumn]);
+      
+      toast({
+        title: 'Column Added',
+        description: `The column "${newColumnName}" has been added successfully.`,
+      });
+      
+      // Reset form
+      setNewColumnName('');
+      setNewColumnType('text');
+      setShowAddColumnModal(false);
+    } catch (error) {
+      console.error('Error adding column:', error);
+      toast({
+        title: 'Add Column Error',
+        description: 'Failed to add the column. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
   
   const renderCellContent = (rowIndex: number, colId: string, studentIndex?: number) => {
     const project = data[rowIndex];
@@ -258,16 +410,86 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
     
     // Special rendering for file type cells
     if (isFileType && value) {
-      value = (
-        <a
-          href={value.toString()}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center text-primary hover:text-primary-dark"
-        >
-          <FileIcon className="h-4 w-4 mr-1" />
-          View File
-        </a>
+      return (
+        <div className="flex items-center">
+          <a
+            href={value.toString()}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center text-primary hover:text-primary-dark mr-2"
+          >
+            <FileIcon className="h-4 w-4 mr-1" />
+            View
+          </a>
+          
+          <div className="relative flex items-center">
+            <input
+              type="file"
+              id={`file-${rowIndex}-${colId}`}
+              className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+              onChange={(e) => handleFileUpload(e, rowIndex, colId)}
+              disabled={!!fileUploading}
+            />
+            <label
+              htmlFor={`file-${rowIndex}-${colId}`}
+              className={`text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 cursor-pointer ${
+                fileUploading?.row === rowIndex && fileUploading?.col === colId
+                  ? 'opacity-50 cursor-wait'
+                  : ''
+              }`}
+            >
+              {fileUploading?.row === rowIndex && fileUploading?.col === colId
+                ? 'Uploading...'
+                : 'Upload'}
+            </label>
+          </div>
+          
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 w-8 p-0 ml-1"
+            onClick={() => handleURLInput(rowIndex, colId)}
+          >
+            <Pencil className="h-3 w-3" />
+          </Button>
+        </div>
+      );
+    }
+    
+    if (isFileType && !value) {
+      return (
+        <div className="flex items-center">
+          <div className="relative flex items-center mr-2">
+            <input
+              type="file"
+              id={`file-${rowIndex}-${colId}`}
+              className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+              onChange={(e) => handleFileUpload(e, rowIndex, colId)}
+              disabled={!!fileUploading}
+            />
+            <label
+              htmlFor={`file-${rowIndex}-${colId}`}
+              className={`text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 cursor-pointer ${
+                fileUploading?.row === rowIndex && fileUploading?.col === colId
+                  ? 'opacity-50 cursor-wait'
+                  : ''
+              }`}
+            >
+              {fileUploading?.row === rowIndex && fileUploading?.col === colId
+                ? 'Uploading...'
+                : 'Upload File'}
+            </label>
+          </div>
+          
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 w-8 p-0"
+            onClick={() => handleURLInput(rowIndex, colId)}
+          >
+            <Pencil className="h-3 w-3" />
+          </Button>
+        </div>
       );
     }
     
@@ -298,7 +520,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
       
       return item.students.map((student, studentIndex) => {
         const row: Record<string, any> = {
-          // Project data (only show for first student in group)
+          // Project data
           'Group No': projectData.group_no,
           'Title': projectData.title,
           'Domain': projectData.domain,
@@ -308,6 +530,9 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
           'Year': projectData.year,
           'Semester': projectData.semester,
           'Faculty Coordinator': projectData.faculty_coordinator,
+          'Progress Form': projectData.progress_form_url || '',
+          'Presentation': projectData.presentation_url || '',
+          'Report': projectData.report_url || '',
           
           // Student data
           'Roll No': student.roll_no,
@@ -332,6 +557,77 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
     
     // Save workbook
     XLSX.writeFile(wb, 'project_data.xlsx');
+  };
+  
+  const handleExportToPDF = () => {
+    try {
+      const doc = new jsPDF('landscape');
+      
+      // Add title and date
+      doc.setFontSize(18);
+      doc.text('Project Data Report', 14, 20);
+      doc.setFontSize(11);
+      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 26);
+      
+      // Add filter information if any
+      if (Object.keys(filters).length > 0) {
+        doc.setFontSize(12);
+        doc.text('Applied Filters:', 14, 34);
+        let yPos = 40;
+        
+        Object.entries(filters).forEach(([key, value]) => {
+          if (value) {
+            const filterName = key.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+            doc.setFontSize(10);
+            doc.text(`${filterName}: ${value}`, 14, yPos);
+            yPos += 6;
+          }
+        });
+      }
+      
+      // Format data for the table
+      const tableData = data.map(item => {
+        const project = item.project;
+        const students = item.students.map(s => `${s.name} (${s.roll_no})`).join(', ');
+        
+        return [
+          project.group_no,
+          project.title,
+          students,
+          project.program || '',
+          project.domain,
+          project.faculty_mentor,
+          project.session,
+          project.year
+        ];
+      });
+      
+      // Generate table with autoTable
+      (doc as any).autoTable({
+        startY: Object.keys(filters).length > 0 ? 50 : 35,
+        head: [['Group No', 'Title', 'Students', 'Program', 'Domain', 'Faculty Mentor', 'Session', 'Year']],
+        body: tableData,
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [41, 128, 185], textColor: 255 },
+        alternateRowStyles: { fillColor: [245, 245, 245] }
+      });
+      
+      // Save the PDF
+      doc.save('project_report.pdf');
+      
+      toast({
+        title: 'Success',
+        description: 'PDF exported successfully',
+      });
+    } catch (error) {
+      console.error('Error exporting to PDF:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to export PDF',
+        variant: 'destructive',
+      });
+    }
   };
   
   // Pagination logic
@@ -380,16 +676,32 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
           <span>entries</span>
         </div>
         
-        <Button variant="outline" onClick={handleExportToExcel}>
-          <DownloadIcon className="h-4 w-4 mr-2" />
-          Export to Excel
-        </Button>
+        <div className="flex space-x-2">
+          <Button variant="outline" onClick={() => setShowAddColumnModal(true)}>
+            + Add Column
+          </Button>
+          <Button variant="outline" onClick={handleExportToExcel}>
+            <DownloadIcon className="h-4 w-4 mr-2" />
+            Export to Excel
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={handleExportToPDF}
+            data-export-pdf-button
+          >
+            <FileIcon className="h-4 w-4 mr-2" />
+            Export to PDF
+          </Button>
+        </div>
       </div>
       
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
+              {/* Actions column */}
+              <TableHead className="w-20">Actions</TableHead>
+              
               {/* Group column */}
               <TableHead>Group Data</TableHead>
               
@@ -405,6 +717,19 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
           <TableBody>
             {paginatedData.map((item, rowIndex) => (
               <TableRow key={item.project.id} className="group">
+                {/* Actions column */}
+                <TableCell className="p-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-600 hover:text-red-800 hover:bg-red-100"
+                    onClick={() => handleDeleteProject(item.project.id)}
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Delete
+                  </Button>
+                </TableCell>
+                
                 {/* Group data cell */}
                 <TableCell className="p-2 align-top">
                   <div className="space-y-3">
@@ -502,6 +827,85 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
           </Pagination>
         </div>
       </div>
+      
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Project Group</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will delete the entire project group and all associated student data. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              className="bg-red-500 hover:bg-red-600"
+              onClick={confirmDeleteProject}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      
+      {/* Add Column Modal */}
+      <Dialog open={showAddColumnModal} onOpenChange={setShowAddColumnModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Custom Column</DialogTitle>
+            <DialogDescription>
+              Add a new column to track additional project information.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <label htmlFor="column-name" className="text-sm font-medium">
+                Column Name
+              </label>
+              <Input
+                id="column-name"
+                value={newColumnName}
+                onChange={(e) => setNewColumnName(e.target.value)}
+                placeholder="e.g., Project Status"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <label htmlFor="column-type" className="text-sm font-medium">
+                Column Type
+              </label>
+              <Select
+                value={newColumnType}
+                onValueChange={setNewColumnType}
+              >
+                <SelectTrigger id="column-type">
+                  <SelectValue placeholder="Select a column type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="text">Text</SelectItem>
+                  <SelectItem value="number">Number</SelectItem>
+                  <SelectItem value="date">Date</SelectItem>
+                  <SelectItem value="boolean">Yes/No</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          
+          <div className="flex justify-end space-x-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowAddColumnModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleAddColumn}>
+              Add Column
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
