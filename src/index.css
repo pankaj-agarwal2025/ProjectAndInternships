@@ -73,8 +73,30 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans;
     font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  
+  /* Typography improvements */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-bold tracking-tight;
+  }
+  
+  h1 {
+    @apply text-4xl md:text-5xl;
+  }
+  
+  h2 {
+    @apply text-3xl md:text-4xl;
+  }
+  
+  h3 {
+    @apply text-2xl md:text-3xl;
+  }
+  
+  /* Card improvements */
+  .card {
+    @apply transition-all duration-300 hover:shadow-lg;
   }
 }
 
@@ -119,6 +141,32 @@
     }
   }
   
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
+  }
+  
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  
+  @keyframes bounce {
+    0%, 100% {
+      transform: translateY(0);
+      animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+    }
+    50% {
+      transform: translateY(-25%);
+      animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
+    }
+  }
+  
   .animate-blob {
     animation: blob 7s infinite;
   }
@@ -129,6 +177,18 @@
   
   .animate-slideIn {
     animation: slideIn 0.5s ease-out forwards;
+  }
+  
+  .animate-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  
+  .animate-spin {
+    animation: spin 1s linear infinite;
+  }
+  
+  .animate-bounce {
+    animation: bounce 1s infinite;
   }
   
   .animation-delay-2000 {
@@ -147,5 +207,39 @@
   /* Glass effect */
   .glass {
     @apply bg-white/10 backdrop-blur-lg border border-white/20 rounded-lg;
+  }
+  
+  /* Button improvements */
+  .btn-hover-effect {
+    @apply relative overflow-hidden transition-all duration-300;
+  }
+  
+  .btn-hover-effect::after {
+    @apply content-[''] absolute inset-0 -translate-x-full bg-white/20 transform skew-x-12 transition-transform duration-300 ease-out;
+  }
+  
+  .btn-hover-effect:hover::after {
+    @apply translate-x-0;
+  }
+  
+  /* Custom table styles */
+  .custom-table {
+    @apply w-full border-collapse overflow-hidden rounded-lg;
+  }
+  
+  .custom-table thead {
+    @apply bg-primary/10;
+  }
+  
+  .custom-table th {
+    @apply text-left p-3 font-semibold text-primary;
+  }
+  
+  .custom-table tbody tr {
+    @apply border-b border-gray-100 hover:bg-gray-50 transition-colors duration-150;
+  }
+  
+  .custom-table td {
+    @apply p-3;
   }
 }

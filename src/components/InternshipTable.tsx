@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Table, 
   TableHeader, 
@@ -52,20 +52,36 @@ interface DynamicColumn {
 }
 
 // Component to display dynamic column values
-const DynamicColumnValue = ({ valuePromise }: { valuePromise: Promise<any> }) => {
+const DynamicColumnValue = ({ internshipId, columnId }: { internshipId: string, columnId: string }) => {
   const [value, setValue] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    valuePromise.then(({ data, error }) => {
-      setIsLoading(false);
-      if (error) {
-        console.error('Error fetching dynamic column value:', error);
-        return;
+    const fetchData = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('internship_dynamic_column_values')
+          .select('value')
+          .eq('internship_id', internshipId)
+          .eq('column_id', columnId)
+          .single();
+        
+        setIsLoading(false);
+        
+        if (error && error.code !== 'PGRST116') {
+          console.error('Error fetching dynamic column value:', error);
+          return;
+        }
+        
+        setValue(data?.value || '');
+      } catch (err) {
+        console.error('Error in DynamicColumnValue:', err);
+        setIsLoading(false);
       }
-      setValue(data?.value || '');
-    });
-  }, [valuePromise]);
+    };
+    
+    fetchData();
+  }, [internshipId, columnId]);
 
   if (isLoading) return <span className="text-gray-400">Loading...</span>;
   return <span>{value || 'Click to add'}</span>;
@@ -919,16 +935,10 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
                                     });
                                 }}
                               >
-                                <Suspense fallback={<span className="text-gray-400">Loading...</span>}>
-                                  <DynamicColumnValue 
-                                    valuePromise={supabase
-                                      .from('internship_dynamic_column_values')
-                                      .select('value')
-                                      .eq('internship_id', internship.id)
-                                      .eq('column_id', column.id)
-                                      .single()} 
-                                  />
-                                </Suspense>
+                                <DynamicColumnValue 
+                                  internshipId={internship.id} 
+                                  columnId={column.id}
+                                />
                               </div>
                             );
                           }

@@ -33,12 +33,14 @@ const Login = () => {
     setIsLoading(true);
     
     try {
+      // Clear any previous errors
+      setErrorVisible(false);
+      
       // Directly query the faculties table to check credentials
       const { data, error } = await supabase
         .from('faculties')
         .select('*')
-        .eq('username', username)
-        .eq('password', password)
+        .eq('username', username.trim())
         .single();
       
       if (error || !data) {
@@ -52,17 +54,34 @@ const Login = () => {
           description: 'Invalid username or password. Please try again.',
           variant: 'destructive',
         });
-      } else {
-        // Store faculty info in session storage
-        sessionStorage.setItem('faculty', JSON.stringify(data));
+        setIsLoading(false);
+        return;
+      }
+      
+      // Now check if the password matches
+      if (data.password !== password.trim()) {
+        setErrorMessage('Invalid username or password. Please try again.');
+        setErrorVisible(true);
+        setTimeout(() => setErrorVisible(false), 5000);
         
         toast({
-          title: 'Login Successful',
-          description: `Welcome, ${data.name}!`,
+          title: 'Login Failed',
+          description: 'Invalid username or password. Please try again.',
+          variant: 'destructive',
         });
-        
-        navigate('/home');
+        setIsLoading(false);
+        return;
       }
+      
+      // Store faculty info in session storage
+      sessionStorage.setItem('faculty', JSON.stringify(data));
+      
+      toast({
+        title: 'Login Successful',
+        description: `Welcome, ${data.name}!`,
+      });
+      
+      navigate('/home');
     } catch (error) {
       console.error('Login error:', error);
       setErrorMessage('An error occurred during login. Please try again.');
@@ -84,9 +103,9 @@ const Login = () => {
       {/* Background with gradient and pattern */}
       <div className="absolute inset-0 bg-gradient-to-b from-blue-900 to-indigo-900 overflow-hidden z-0">
         <div 
-          className="absolute inset-0 opacity-10" 
+          className="absolute inset-0 opacity-20" 
           style={{ 
-            backgroundImage: 'url("https://images.unsplash.com/photo-1515378791036-0648a3ef77b2?ixid=MXwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHw%3D&ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80")', 
+            backgroundImage: 'url("https://images.unsplash.com/photo-1517842645767-c639042777db?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80")', 
             backgroundSize: 'cover',
             backgroundPosition: 'center'
           }}
@@ -178,16 +197,6 @@ const Login = () => {
               </p>
             </CardFooter>
           </Card>
-          
-          {/* Test credentials hint */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5, duration: 0.5 }}
-            className="mt-4 p-3 bg-white/50 backdrop-blur-sm rounded-lg text-sm text-center text-gray-600"
-          >
-            <p><strong>Demo credentials:</strong> Username: "dr.swati", Password: "password"</p>
-          </motion.div>
         </motion.div>
       </div>
       
