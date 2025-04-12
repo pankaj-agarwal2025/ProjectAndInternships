@@ -144,7 +144,7 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
                     <SelectValue placeholder="Select program" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Programs</SelectItem>
+                    <SelectItem value="all">All Programs</SelectItem>
                     {programOptions.map(option => (
                       <SelectItem key={option} value={option}>{option}</SelectItem>
                     ))}
@@ -172,7 +172,7 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
                     <SelectValue placeholder="Select faculty coordinator" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Coordinators</SelectItem>
+                    <SelectItem value="all">All Coordinators</SelectItem>
                     {facultyCoordinatorOptions.map(option => (
                       <SelectItem key={option} value={option}>{option}</SelectItem>
                     ))}
@@ -266,7 +266,7 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
                 <SelectValue placeholder="Faculty Coordinator" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Coordinators</SelectItem>
+                <SelectItem value="all">All Coordinators</SelectItem>
                 {facultyCoordinatorOptions.map(option => (
                   <SelectItem key={option} value={option}>{option}</SelectItem>
                 ))}
