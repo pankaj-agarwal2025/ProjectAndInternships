@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Filter } from 'lucide-react';
+import { Filter, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -18,6 +18,22 @@ const facultyCoordinatorOptions = [
   'Dr. Pankaj', 'Dr. Anshu', 'Dr. Meenu', 'Dr. Swati'
 ];
 
+// Month options
+const monthOptions = [
+  { value: "01", label: "January" },
+  { value: "02", label: "February" },
+  { value: "03", label: "March" },
+  { value: "04", label: "April" },
+  { value: "05", label: "May" },
+  { value: "06", label: "June" },
+  { value: "07", label: "July" },
+  { value: "08", label: "August" },
+  { value: "09", label: "September" },
+  { value: "10", label: "October" },
+  { value: "11", label: "November" },
+  { value: "12", label: "December" }
+];
+
 interface InternshipFiltersProps {
   onFilterChange: (filters: Record<string, any>) => void;
 }
@@ -33,7 +49,8 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
     organization_name: '',
     year: '',
     semester: '',
-    session: ''
+    session: '',
+    starting_month: ''
   });
   const [dynamicColumns, setDynamicColumns] = useState<any[]>([]);
   const [dynamicFilters, setDynamicFilters] = useState<Record<string, string>>({});
@@ -220,6 +237,30 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
                 />
               </div>
               
+              {/* Month filter for starting date */}
+              <div className="space-y-2">
+                <Label htmlFor="starting-month" className="flex items-center">
+                  <Calendar className="h-4 w-4 mr-1" />
+                  Starting Month
+                </Label>
+                <Select
+                  value={filters.starting_month}
+                  onValueChange={(value) => handleFilterChange('starting_month', value)}
+                >
+                  <SelectTrigger id="starting-month">
+                    <SelectValue placeholder="Select month" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Months</SelectItem>
+                    {monthOptions.map((month) => (
+                      <SelectItem key={month.value} value={month.value}>
+                        {month.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
               {/* Dynamic column filters */}
               {dynamicColumns.map(column => (
                 <div key={column.id} className="space-y-2">
@@ -269,6 +310,27 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
                 <SelectItem value="all">All Coordinators</SelectItem>
                 {facultyCoordinatorOptions.map(option => (
                   <SelectItem key={option} value={option}>{option}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
+            {/* Month filter for collapsed view */}
+            <Select
+              value={filters.starting_month}
+              onValueChange={(value) => {
+                handleFilterChange('starting_month', value);
+                applyFilters();
+              }}
+            >
+              <SelectTrigger className="w-full sm:w-[150px]">
+                <SelectValue placeholder="Starting Month" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Months</SelectItem>
+                {monthOptions.map((month) => (
+                  <SelectItem key={month.value} value={month.value}>
+                    {month.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>

@@ -16,7 +16,7 @@ const Landing = () => {
           backgroundSize: 'cover'
         }}
       >
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-900/70 via-indigo-800/65 to-purple-900/70"></div>
+        <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/60 to-black/80"></div>
       </div>
       
       {/* Header with Logo */}
@@ -25,12 +25,12 @@ const Landing = () => {
           <img 
             src="public/lovable-uploads/b33b909d-7859-40ab-a23f-ac4754a64fca.png" 
             alt="K.R. Mangalam University Logo" 
-            className="w-8 h-8 md:w-10 md:h-10 mr-2 object-contain"
+            className="w-10 h-10 md:w-12 md:h-12 mr-2 object-contain"
           />
-          <span className="text-white text-sm md:text-base font-semibold">K.R. Mangalam University</span>
+          <span className="text-white text-base md:text-lg font-bold">K.R. Mangalam University</span>
         </div>
         <Link to="/login">
-          <Button className="bg-blue-600 hover:bg-blue-700 text-white">
+          <Button className="bg-blue-500 hover:bg-blue-600 text-white">
             Login
           </Button>
         </Link>
@@ -45,7 +45,7 @@ const Landing = () => {
           className="space-y-8 max-w-4xl text-center"
         >
           {/* Main Heading */}
-          <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-blue-400 tracking-tight drop-shadow-lg">
+          <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-white tracking-tight drop-shadow-lg">
             Project & Internship <br/>Management
           </h1>
           
@@ -54,10 +54,9 @@ const Landing = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.3, duration: 0.7 }}
-            className="text-xl md:text-2xl text-gray-100 max-w-3xl mx-auto leading-relaxed"
+            className="text-xl md:text-2xl text-gray-200 max-w-3xl mx-auto leading-relaxed"
           >
-            Project & Internship Management Portal for faculty members to 
-            efficiently track and manage student progress.
+            A comprehensive portal for faculty members to efficiently track and manage student projects and internships.
           </motion.p>
           
           {/* Get Started Button */}
@@ -65,10 +64,10 @@ const Landing = () => {
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.6, duration: 0.5 }}
-            className="mt-8"
+            className="mt-10"
           >
             <Link to="/login">
-              <Button className="text-lg px-10 py-6 bg-blue-600 hover:bg-blue-700 transition-all shadow-lg hover:shadow-xl rounded-md flex items-center gap-3">
+              <Button className="text-lg px-10 py-6 bg-blue-500 hover:bg-blue-600 transition-all shadow-lg hover:shadow-xl rounded-full flex items-center gap-3">
                 <GraduationCap size={24} />
                 Get Started
                 <ArrowRight size={20} className="ml-2 transition-transform group-hover:translate-x-1" />

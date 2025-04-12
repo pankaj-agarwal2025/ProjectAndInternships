@@ -9,6 +9,7 @@ import AddProjectModal from '@/components/AddProjectModal';
 import ImportExcelModal from '@/components/ImportExcelModal';
 import { Faculty, setupDatabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
+import { FilePlus2, Download } from 'lucide-react';
 
 const ProjectPortal = () => {
   const navigate = useNavigate();
@@ -99,14 +100,17 @@ const ProjectPortal = () => {
           
           <div className="flex flex-col sm:flex-row gap-3">
             <Button 
-              className="bg-secondary hover:bg-secondary/80"
+              className="bg-secondary hover:bg-secondary/80 flex items-center"
               onClick={() => setShowImportExcelModal(true)}
             >
+              <FilePlus2 className="mr-2 h-4 w-4" />
               Upload Excel
             </Button>
             <Button 
               onClick={() => setShowAddProjectModal(true)}
+              className="flex items-center"
             >
+              <Download className="mr-2 h-4 w-4" />
               Add New Project
             </Button>
           </div>

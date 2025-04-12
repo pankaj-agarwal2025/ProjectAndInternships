@@ -7,6 +7,7 @@ import InternshipTable from '@/components/InternshipTable';
 import InternshipFilters from '@/components/InternshipFilters';
 import { Faculty, setupDatabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
+import { PlusCircle, Database } from 'lucide-react';
 
 const InternshipPortal = () => {
   const navigate = useNavigate();
@@ -93,18 +94,24 @@ const InternshipPortal = () => {
             </p>
           </div>
           
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex gap-3">
             <Button 
-              className="bg-primary hover:bg-primary/90"
+              className="bg-primary hover:bg-primary/90 flex items-center"
               onClick={() => {
-                // Add new internship functionality
+                // Scroll to internship table
                 const internshipTable = document.getElementById('internship-table-container');
                 if (internshipTable) {
                   internshipTable.scrollIntoView({ behavior: 'smooth' });
                 }
+                // Focus on add new internship button by triggering a click event
+                const addButton = document.querySelector('[data-add-internship]');
+                if (addButton) {
+                  (addButton as HTMLButtonElement).click();
+                }
               }}
             >
-              Manage Internships
+              <PlusCircle size={18} className="mr-2" />
+              Add New Internship
             </Button>
           </div>
         </div>

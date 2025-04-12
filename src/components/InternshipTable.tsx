@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Table, 
   TableHeader, 
@@ -14,9 +13,21 @@ import { Input } from '@/components/ui/input';
 import { Calendar } from '@/components/ui/calendar';
 import { format } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar as CalendarIcon, Trash2, FileText, X, ArrowLeft, ArrowRight } from 'lucide-react';
+import { 
+  Calendar as CalendarIcon, 
+  Trash2, 
+  FileText, 
+  ArrowLeft, 
+  ArrowRight, 
+  Save,
+  Download,
+  FileUp
+} from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import * as XLSX from 'xlsx';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
 
 interface InternshipTableProps {
   filters: Record<string, any>;
@@ -84,23 +95,24 @@ const DynamicColumnValue = ({ internshipId, columnId }: { internshipId: string, 
   }, [internshipId, columnId]);
 
   if (isLoading) return <span className="text-gray-400">Loading...</span>;
-  return <span>{value || 'Click to add'}</span>;
+  return <span>{value || '-'}</span>;
 };
 
 const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
   const [internships, setInternships] = useState<Internship[]>([]);
   const [loading, setLoading] = useState(true);
   const [editableCell, setEditableCell] = useState<{ id: string, field: string } | null>(null);
+  const [editedCells, setEditedCells] = useState<Record<string, Record<string, any>>>({});
   const [newValue, setNewValue] = useState<string>('');
   const [dynamicColumns, setDynamicColumns] = useState<DynamicColumn[]>([]);
   const [newColumnName, setNewColumnName] = useState('');
   const [newColumnType, setNewColumnType] = useState('text');
   const [showAddColumn, setShowAddColumn] = useState(false);
   const [fileUploading, setFileUploading] = useState<{ id: string, field: string } | null>(null);
-  const [startDate, setStartDate] = useState<Date | null>(null);
-  const [endDate, setEndDate] = useState<Date | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
   const { toast } = useToast();
   
   // Program options
@@ -133,10 +145,15 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       // Apply filters if they exist
       if (filters && Object.keys(filters).length > 0) {
         Object.entries(filters).forEach(([key, value]) => {
-          if (value) {
+          if (value && key !== 'starting_month') {
             query = query.eq(key, value);
           }
         });
+        
+        // Special handling for starting_month filter
+        if (filters.starting_month) {
+          query = query.ilike('starting_date', `%-${filters.starting_month}-%`);
+        }
       }
       
       const { data, error } = await query.order('created_at', { ascending: false });
@@ -155,6 +172,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         }));
         
         setInternships(formattedData);
+        setEditedCells({});
       }
     } catch (error) {
       console.error('Error:', error);
@@ -194,18 +212,88 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
   };
   
   const formatDateForDisplay = (dateString: string) => {
-    const date = new Date(dateString);
-    return `${date.getDate().toString().padStart(2, '0')}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getFullYear()}`;
+    if (!dateString) return '';
+    try {
+      const date = new Date(dateString);
+      return `${date.getDate().toString().padStart(2, '0')}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getFullYear()}`;
+    } catch (e) {
+      console.error("Error formatting date:", e);
+      return dateString; // Return original if error
+    }
   };
   
   const formatDateForDB = (dateString: string) => {
-    const [day, month, year] = dateString.split('-');
-    return `${year}-${month}-${day}`;
+    if (!dateString) return null;
+    try {
+      const [day, month, year] = dateString.split('-');
+      return `${year}-${month}-${day}`;
+    } catch (e) {
+      console.error("Error formatting date for DB:", e);
+      return dateString; // Return original if error
+    }
   };
   
   const handleEdit = (id: string, field: string, value: string) => {
+    setEditedCells(prev => ({
+      ...prev,
+      [id]: { ...prev[id], [field]: value }
+    }));
     setEditableCell({ id, field });
     setNewValue(value);
+  };
+  
+  const handleSaveAll = async () => {
+    try {
+      for (const [id, fields] of Object.entries(editedCells)) {
+        // Prepare data for update
+        const updateData: Record<string, any> = {
+          ...fields,
+          updated_at: new Date().toISOString()
+        };
+        
+        // Format dates for database
+        if (updateData.starting_date) {
+          updateData.starting_date = formatDateForDB(updateData.starting_date);
+        }
+        if (updateData.ending_date) {
+          updateData.ending_date = formatDateForDB(updateData.ending_date);
+        }
+        
+        // Update internship in database
+        const { error } = await supabase
+          .from('internships')
+          .update(updateData)
+          .eq('id', id);
+        
+        if (error) {
+          console.error(`Error updating internship ${id}:`, error);
+          toast({
+            title: 'Error',
+            description: `Failed to update internship: ${error.message}`,
+            variant: 'destructive',
+          });
+          return;
+        }
+      }
+      
+      // Refresh data
+      fetchInternships();
+      
+      toast({
+        title: 'Success',
+        description: 'All changes saved successfully',
+      });
+      
+      // Clear edited cells
+      setEditedCells({});
+    } catch (error) {
+      console.error('Error saving changes:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to save changes',
+        variant: 'destructive',
+      });
+    }
   };
   
   const handleSave = async () => {
@@ -214,28 +302,13 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     try {
       const { id, field } = editableCell;
       
-      // For date fields, convert from dd-mm-yyyy to yyyy-mm-dd for database
-      let valueToSave = newValue;
-      if (field === 'starting_date' || field === 'ending_date') {
-        valueToSave = formatDateForDB(newValue);
-      }
+      // Update local edited cells state
+      setEditedCells(prev => ({
+        ...prev,
+        [id]: { ...prev[id], [field]: newValue }
+      }));
       
-      const updateData: Record<string, any> = {
-        [field]: valueToSave,
-        updated_at: new Date().toISOString()
-      };
-      
-      const { error } = await supabase
-        .from('internships')
-        .update(updateData)
-        .eq('id', id);
-      
-      if (error) {
-        console.error('Error updating internship:', error);
-        throw error;
-      }
-      
-      // Update local state
+      // Update local state immediately for better UX
       setInternships(internships.map(internship => 
         internship.id === id 
           ? { ...internship, [field]: newValue } 
@@ -243,14 +316,14 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       ));
       
       toast({
-        title: 'Success',
-        description: 'Internship updated successfully',
+        title: 'Cell Updated',
+        description: 'Remember to click "Save All Changes" to persist to database',
       });
     } catch (error) {
       console.error('Error:', error);
       toast({
         title: 'Error',
-        description: 'Failed to update internship',
+        description: 'Failed to update cell',
         variant: 'destructive',
       });
     } finally {
@@ -264,14 +337,14 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     setNewValue('');
   };
   
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this internship record?')) return;
+  const handleDelete = async () => {
+    if (!deleteId) return;
     
     try {
       const { error } = await supabase
         .from('internships')
         .delete()
-        .eq('id', id);
+        .eq('id', deleteId);
       
       if (error) {
         console.error('Error deleting internship:', error);
@@ -279,7 +352,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       }
       
       // Update local state
-      setInternships(internships.filter(internship => internship.id !== id));
+      setInternships(internships.filter(internship => internship.id !== deleteId));
       
       toast({
         title: 'Success',
@@ -292,7 +365,15 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         description: 'Failed to delete internship',
         variant: 'destructive',
       });
+    } finally {
+      setDeleteId(null);
+      setDeleteConfirmOpen(false);
     }
+  };
+  
+  const confirmDelete = (id: string) => {
+    setDeleteId(id);
+    setDeleteConfirmOpen(true);
   };
   
   const handleAddColumn = async () => {
@@ -524,6 +605,22 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
           delete exportData.created_at;
           delete exportData.updated_at;
           
+          // Change starting_date and ending_date format
+          if (exportData.starting_date) {
+            const [day, month, year] = exportData.starting_date.split('-');
+            exportData.starting_date = `${year}-${month}-${day}`;
+          }
+          
+          if (exportData.ending_date) {
+            const [day, month, year] = exportData.ending_date.split('-');
+            exportData.ending_date = `${year}-${month}-${day}`;
+          }
+          
+          // If no ending date, show "Ongoing" for duration
+          if (!exportData.ending_date) {
+            exportData.internship_duration = 'Ongoing';
+          }
+          
           return exportData;
         })
       );
@@ -549,6 +646,75 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     }
   };
   
+  const exportToPDF = () => {
+    try {
+      const doc = new jsPDF('landscape');
+      
+      // Add title and date
+      doc.setFontSize(18);
+      doc.text('Internship Data Report', 14, 20);
+      doc.setFontSize(11);
+      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 26);
+      
+      // Add filter information if any
+      if (Object.keys(filters).length > 0) {
+        doc.setFontSize(12);
+        doc.text('Applied Filters:', 14, 34);
+        let yPos = 40;
+        
+        Object.entries(filters).forEach(([key, value]) => {
+          if (value) {
+            const filterName = key.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+            doc.setFontSize(10);
+            doc.text(`${filterName}: ${value}`, 14, yPos);
+            yPos += 6;
+          }
+        });
+      }
+      
+      // Get table headers
+      const headers = ['Roll No', 'Name', 'Organization', 'Position', 'Program', 'Starting Date', 'Ending Date', 'Duration'];
+      
+      // Create table data
+      const data = internships.map(internship => [
+        internship.roll_no || '',
+        internship.name || '',
+        internship.organization_name || '',
+        internship.position || '',
+        internship.program || '',
+        internship.starting_date || '',
+        internship.ending_date || '',
+        internship.ending_date ? (internship.internship_duration || '') : 'Ongoing'
+      ]);
+      
+      // Generate table
+      doc.autoTable({
+        startY: Object.keys(filters).length > 0 ? 50 : 35,
+        head: [headers],
+        body: data,
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [41, 128, 185], textColor: 255 },
+        alternateRowStyles: { fillColor: [245, 245, 245] }
+      });
+      
+      // Save the PDF
+      doc.save('internship_report.pdf');
+      
+      toast({
+        title: 'Success',
+        description: 'PDF exported successfully',
+      });
+    } catch (error) {
+      console.error('Error exporting to PDF:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to export PDF',
+        variant: 'destructive',
+      });
+    }
+  };
+  
   const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
     
@@ -569,38 +735,101 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         // Convert to JSON
         const jsonData = XLSX.utils.sheet_to_json(worksheet);
         
+        // Track results
+        let updated = 0;
+        let inserted = 0;
+        let errors = 0;
+        
         // Insert into database
         for (const row of jsonData) {
-          const internshipData: Record<string, any> = {};
-          
-          // Map Excel columns to database columns
-          Object.entries(row).forEach(([key, value]) => {
-            // Handle date fields
-            if (key === 'starting_date' || key === 'ending_date') {
+          try {
+            const internshipData: Record<string, any> = {};
+            
+            // Map Excel columns to database columns
+            Object.entries(row).forEach(([key, value]) => {
+              const dbKey = key.toLowerCase().replace(/\s+/g, '_');
+              
+              // Handle different data types
               if (typeof value === 'string') {
-                // If date is in dd-mm-yyyy format, convert to yyyy-mm-dd
-                if (/^\d{2}-\d{2}-\d{4}$/.test(value)) {
-                  internshipData[key] = formatDateForDB(value);
-                } else {
-                  internshipData[key] = value;
-                }
+                internshipData[dbKey] = value;
               } else if (value instanceof Date) {
-                internshipData[key] = value.toISOString().split('T')[0];
+                internshipData[dbKey] = value.toISOString().split('T')[0];
               } else {
-                internshipData[key] = value;
+                internshipData[dbKey] = value;
+              }
+              
+              // Handle date fields
+              if (dbKey === 'starting_date' || dbKey === 'ending_date') {
+                // Try to fix date format
+                if (typeof value === 'string') {
+                  if (/^\d{2}-\d{2}-\d{4}$/.test(value)) {
+                    // If date is in dd-mm-yyyy format, convert to yyyy-mm-dd
+                    const [day, month, year] = value.split('-');
+                    internshipData[dbKey] = `${year}-${month}-${day}`;
+                  } else if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+                    // Already in yyyy-mm-dd format
+                    internshipData[dbKey] = value;
+                  } else if (/^\d+$/.test(value.toString())) {
+                    // If date is in Excel serial number format
+                    const excelSerialDate = parseInt(value.toString());
+                    const jsDate = new Date(Math.floor((excelSerialDate - 25569) * 86400 * 1000));
+                    internshipData[dbKey] = jsDate.toISOString().split('T')[0];
+                  }
+                } else if (typeof value === 'number') {
+                  // If date is in Excel serial number format
+                  const jsDate = new Date(Math.floor((value - 25569) * 86400 * 1000));
+                  internshipData[dbKey] = jsDate.toISOString().split('T')[0];
+                }
+              }
+            });
+            
+            // Check if this is an update or insert
+            if (internshipData.roll_no && internshipData.organization_name) {
+              // First check if record exists
+              const { data: existingData, error: queryError } = await supabase
+                .from('internships')
+                .select('id')
+                .eq('roll_no', internshipData.roll_no)
+                .eq('organization_name', internshipData.organization_name);
+              
+              if (queryError) throw queryError;
+              
+              if (existingData && existingData.length > 0) {
+                // Update existing record
+                const { error: updateError } = await supabase
+                  .from('internships')
+                  .update(internshipData)
+                  .eq('id', existingData[0].id);
+                
+                if (updateError) throw updateError;
+                updated++;
+              } else {
+                // Insert new record
+                const { error: insertError } = await supabase
+                  .from('internships')
+                  .insert(internshipData);
+                
+                if (insertError) throw insertError;
+                inserted++;
               }
             } else {
-              internshipData[key] = value;
+              // Insert new record
+              const { error: insertError } = await supabase
+                .from('internships')
+                .insert(internshipData);
+              
+              if (insertError) throw insertError;
+              inserted++;
             }
-          });
-          
-          // Insert into database
-          await supabase.from('internships').insert(internshipData);
+          } catch (rowError) {
+            console.error('Error processing row:', rowError, row);
+            errors++;
+          }
         }
         
         toast({
-          title: 'Success',
-          description: `${jsonData.length} records imported successfully`,
+          title: 'Import Complete',
+          description: `${inserted} records added, ${updated} records updated, ${errors} errors encountered.`,
         });
         
         // Refresh data
@@ -616,6 +845,14 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     };
     
     reader.readAsArrayBuffer(file);
+  };
+  
+  // Calculate internship duration and display "Ongoing" if no ending date
+  const getInternshipDuration = (internship: Internship) => {
+    if (!internship.ending_date) {
+      return <span className="text-blue-500 font-medium">Ongoing</span>;
+    }
+    return internship.internship_duration || '-';
   };
   
   // Page navigation
@@ -636,15 +873,19 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
   };
   
   const renderCell = (internship: Internship, field: string, displayField: string) => {
-    if (editableCell && editableCell.id === internship.id && editableCell.field === field) {
+    const isEditing = editableCell && editableCell.id === internship.id && editableCell.field === field;
+    const hasChanges = editedCells[internship.id]?.[field] !== undefined;
+    const valueToShow = hasChanges ? editedCells[internship.id][field] : internship[field];
+    
+    if (isEditing) {
       // Different input types based on the field
       if (field === 'faculty_coordinator') {
         return (
-          <div className="flex items-center">
+          <div className="flex items-center border border-blue-300 bg-blue-50 rounded p-1">
             <select
               value={newValue}
               onChange={(e) => setNewValue(e.target.value)}
-              className="w-full p-1 border rounded"
+              className="w-full p-1 bg-transparent focus:outline-none"
             >
               <option value="">Select Coordinator</option>
               {facultyCoordinators.map((coord) => (
@@ -653,17 +894,17 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
                 </option>
               ))}
             </select>
-            <Button size="sm" variant="ghost" onClick={handleSave} className="ml-1">✓</Button>
-            <Button size="sm" variant="ghost" onClick={handleCancel} className="ml-1">✕</Button>
+            <Button size="sm" variant="ghost" onClick={handleSave} className="ml-1 text-green-600">✓</Button>
+            <Button size="sm" variant="ghost" onClick={handleCancel} className="ml-1 text-red-600">✕</Button>
           </div>
         );
       } else if (field === 'program') {
         return (
-          <div className="flex items-center">
+          <div className="flex items-center border border-blue-300 bg-blue-50 rounded p-1">
             <select
               value={newValue}
               onChange={(e) => setNewValue(e.target.value)}
-              className="w-full p-1 border rounded"
+              className="w-full p-1 bg-transparent focus:outline-none"
             >
               <option value="">Select Program</option>
               {programOptions.map((prog) => (
@@ -672,13 +913,13 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
                 </option>
               ))}
             </select>
-            <Button size="sm" variant="ghost" onClick={handleSave} className="ml-1">✓</Button>
-            <Button size="sm" variant="ghost" onClick={handleCancel} className="ml-1">✕</Button>
+            <Button size="sm" variant="ghost" onClick={handleSave} className="ml-1 text-green-600">✓</Button>
+            <Button size="sm" variant="ghost" onClick={handleCancel} className="ml-1 text-red-600">✕</Button>
           </div>
         );
       } else if (field === 'starting_date' || field === 'ending_date') {
         return (
-          <div className="flex items-center">
+          <div className="flex items-center border border-blue-300 bg-blue-50 rounded p-1">
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm" className="w-full justify-start text-left">
@@ -689,7 +930,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
               <PopoverContent className="w-auto p-0">
                 <Calendar
                   mode="single"
-                  selected={newValue ? new Date(formatDateForDB(newValue)) : undefined}
+                  selected={newValue ? new Date(formatDateForDB(newValue) || '') : undefined}
                   onSelect={(date) => {
                     if (date) {
                       setNewValue(format(date, 'dd-MM-yyyy'));
@@ -698,337 +939,24 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
                 />
               </PopoverContent>
             </Popover>
-            <Button size="sm" variant="ghost" onClick={handleSave} className="ml-1">✓</Button>
-            <Button size="sm" variant="ghost" onClick={handleCancel} className="ml-1">✕</Button>
+            <Button size="sm" variant="ghost" onClick={handleSave} className="ml-1 text-green-600">✓</Button>
+            <Button size="sm" variant="ghost" onClick={handleCancel} className="ml-1 text-red-600">✕</Button>
           </div>
         );
       } else {
         return (
-          <div className="flex items-center">
+          <div className="flex items-center border border-blue-300 bg-blue-50 rounded p-1">
             <Input
               value={newValue}
               onChange={(e) => setNewValue(e.target.value)}
-              className="w-full p-1"
+              className="w-full p-1 border-none bg-transparent focus:outline-none"
+              autoFocus
             />
-            <Button size="sm" variant="ghost" onClick={handleSave} className="ml-1">✓</Button>
-            <Button size="sm" variant="ghost" onClick={handleCancel} className="ml-1">✕</Button>
+            <Button size="sm" variant="ghost" onClick={handleSave} className="ml-1 text-green-600">✓</Button>
+            <Button size="sm" variant="ghost" onClick={handleCancel} className="ml-1 text-red-600">✕</Button>
           </div>
         );
       }
     } else {
       // File upload fields
-      if (field === 'offer_letter_url' || field === 'noc_url' || field === 'ppo_url') {
-        return (
-          <div className="flex items-center justify-between">
-            {internship[field] ? (
-              <a href={internship[field]} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center">
-                <FileText size={16} className="mr-1" />
-                View
-              </a>
-            ) : (
-              <span className="text-gray-400">No file</span>
-            )}
-            <label className="cursor-pointer text-secondary hover:text-secondary-dark ml-2">
-              {fileUploading && fileUploading.id === internship.id && fileUploading.field === field ? (
-                <span>Uploading...</span>
-              ) : (
-                <span>Upload</span>
-              )}
-              <input
-                type="file"
-                accept=".pdf"
-                className="hidden"
-                onChange={(e) => handleFileUpload(e, internship.id, field)}
-              />
-            </label>
-          </div>
-        );
-      }
-      
-      // For dates, show calendar picker
-      if (field === 'starting_date' || field === 'ending_date') {
-        return (
-          <div
-            className="cursor-pointer hover:bg-gray-100 p-1 rounded"
-            onClick={() => handleEdit(internship.id, field, internship[field] || '')}
-          >
-            {internship[field] || 'Click to add'}
-          </div>
-        );
-      }
-      
-      // For regular fields
-      return (
-        <div
-          className="cursor-pointer hover:bg-gray-100 p-1 rounded"
-          onClick={() => handleEdit(internship.id, field, internship[field] || '')}
-        >
-          {internship[field] || 'Click to add'}
-        </div>
-      );
-    }
-  };
-  
-  if (loading) {
-    return <div className="p-8 text-center">Loading internship data...</div>;
-  }
-  
-  return (
-    <div className="overflow-x-auto">
-      <div className="mb-6 flex flex-wrap justify-between items-center gap-4">
-        <div className="flex items-center space-x-4">
-          <Button onClick={handleAddInternship} className="bg-primary hover:bg-primary/90">
-            Add New Internship
-          </Button>
-          <div>
-            <label htmlFor="import-excel" className="cursor-pointer">
-              <Button variant="outline" className="mr-2">
-                Import Excel
-              </Button>
-              <input
-                id="import-excel"
-                type="file"
-                accept=".xlsx, .xls"
-                className="hidden"
-                onChange={handleImportExcel}
-              />
-            </label>
-            <Button variant="outline" onClick={exportToExcel}>
-              Export Excel
-            </Button>
-          </div>
-        </div>
-        <div>
-          <Button 
-            variant={showAddColumn ? "default" : "outline"} 
-            onClick={() => setShowAddColumn(!showAddColumn)}
-          >
-            {showAddColumn ? 'Cancel' : 'Add Column'}
-          </Button>
-        </div>
-      </div>
-      
-      {showAddColumn && (
-        <div className="mb-6 p-4 border rounded-md bg-gray-50">
-          <h3 className="text-lg font-semibold mb-3">Add New Column</h3>
-          <div className="flex flex-wrap gap-4">
-            <div className="grow">
-              <label className="block text-sm font-medium mb-1">Column Name</label>
-              <Input
-                value={newColumnName}
-                onChange={(e) => setNewColumnName(e.target.value)}
-                placeholder="Enter column name"
-              />
-            </div>
-            <div className="w-40">
-              <label className="block text-sm font-medium mb-1">Type</label>
-              <select
-                value={newColumnType}
-                onChange={(e) => setNewColumnType(e.target.value)}
-                className="w-full p-2 border rounded"
-              >
-                <option value="text">Text</option>
-                <option value="number">Number</option>
-                <option value="date">Date</option>
-                <option value="file">File</option>
-              </select>
-            </div>
-            <div className="flex items-end">
-              <Button onClick={handleAddColumn}>Add Column</Button>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      <div className="border rounded-md overflow-hidden">
-        <Table>
-          <TableHeader className="bg-gray-100">
-            <TableRow>
-              <TableHead>Roll No</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Phone</TableHead>
-              <TableHead>Organization</TableHead>
-              <TableHead>Position</TableHead>
-              <TableHead>Program</TableHead>
-              <TableHead>Session</TableHead>
-              <TableHead>Starting Date</TableHead>
-              <TableHead>Ending Date</TableHead>
-              <TableHead>Duration (days)</TableHead>
-              <TableHead>Faculty Coordinator</TableHead>
-              <TableHead>Offer Letter</TableHead>
-              <TableHead>NOC</TableHead>
-              <TableHead>PPO</TableHead>
-              {dynamicColumns.map((column) => (
-                <TableHead key={column.id}>{column.name}</TableHead>
-              ))}
-              <TableHead>Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {currentInternships.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={15 + dynamicColumns.length} className="text-center py-8">
-                  No internships found. Click "Add New Internship" to create one.
-                </TableCell>
-              </TableRow>
-            ) : (
-              currentInternships.map((internship) => (
-                <TableRow key={internship.id} className="hover:bg-gray-50">
-                  <TableCell>{renderCell(internship, 'roll_no', 'Roll No')}</TableCell>
-                  <TableCell>{renderCell(internship, 'name', 'Name')}</TableCell>
-                  <TableCell>{renderCell(internship, 'email', 'Email')}</TableCell>
-                  <TableCell>{renderCell(internship, 'phone_no', 'Phone')}</TableCell>
-                  <TableCell>{renderCell(internship, 'organization_name', 'Organization')}</TableCell>
-                  <TableCell>{renderCell(internship, 'position', 'Position')}</TableCell>
-                  <TableCell>{renderCell(internship, 'program', 'Program')}</TableCell>
-                  <TableCell>{renderCell(internship, 'session', 'Session')}</TableCell>
-                  <TableCell>{renderCell(internship, 'starting_date', 'Starting Date')}</TableCell>
-                  <TableCell>{renderCell(internship, 'ending_date', 'Ending Date')}</TableCell>
-                  <TableCell>{internship.internship_duration || '-'}</TableCell>
-                  <TableCell>{renderCell(internship, 'faculty_coordinator', 'Faculty Coordinator')}</TableCell>
-                  <TableCell>{renderCell(internship, 'offer_letter_url', 'Offer Letter')}</TableCell>
-                  <TableCell>{renderCell(internship, 'noc_url', 'NOC')}</TableCell>
-                  <TableCell>{renderCell(internship, 'ppo_url', 'PPO')}</TableCell>
-                  
-                  {/* Dynamic columns */}
-                  {dynamicColumns.map((column) => (
-                    <TableCell key={column.id}>
-                      {
-                        (() => {
-                          if (editableCell && editableCell.id === internship.id && editableCell.field === column.id) {
-                            return (
-                              <div className="flex items-center">
-                                <Input
-                                  value={newValue}
-                                  onChange={(e) => setNewValue(e.target.value)}
-                                  className="w-full p-1"
-                                />
-                                <Button size="sm" variant="ghost" onClick={handleSave} className="ml-1">✓</Button>
-                                <Button size="sm" variant="ghost" onClick={handleCancel} className="ml-1">✕</Button>
-                              </div>
-                            );
-                          } else {
-                            return (
-                              <div
-                                className="cursor-pointer hover:bg-gray-100 p-1 rounded"
-                                onClick={() => {
-                                  setEditableCell({ id: internship.id, field: column.id });
-                                  // Fetch existing value
-                                  supabase
-                                    .from('internship_dynamic_column_values')
-                                    .select('value')
-                                    .eq('internship_id', internship.id)
-                                    .eq('column_id', column.id)
-                                    .single()
-                                    .then(({ data, error }) => {
-                                      if (error && error.code !== 'PGRST116') {
-                                        console.error('Error fetching dynamic column value:', error);
-                                        toast({
-                                          title: 'Error',
-                                          description: 'Failed to fetch dynamic column value',
-                                          variant: 'destructive',
-                                        });
-                                      } else {
-                                        setNewValue(data ? data.value : '');
-                                      }
-                                    });
-                                }}
-                              >
-                                <DynamicColumnValue 
-                                  internshipId={internship.id} 
-                                  columnId={column.id}
-                                />
-                              </div>
-                            );
-                          }
-                        })()
-                      }
-                    </TableCell>
-                  ))}
-                  
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(internship.id)}
-                      className="text-destructive hover:text-destructive/90 hover:bg-destructive/10"
-                    >
-                      <Trash2 size={16} />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
-      
-      {/* Pagination controls */}
-      {internships.length > 0 && (
-        <div className="flex items-center justify-between mt-4">
-          <div>
-            <span className="text-sm text-gray-700">
-              Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, internships.length)} of {internships.length} entries
-            </span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={prevPage}
-              disabled={currentPage === 1}
-              className="flex items-center gap-1"
-            >
-              <ArrowLeft size={16} />
-              Previous
-            </Button>
-            
-            <div className="flex items-center space-x-1">
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                // Show 5 pages at most centered around the current page
-                let pageNum = currentPage;
-                if (currentPage <= 3) {
-                  pageNum = i + 1;
-                } else if (currentPage >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i;
-                } else {
-                  pageNum = currentPage - 2 + i;
-                }
-                
-                // Ensure pageNum is within valid range
-                if (pageNum > 0 && pageNum <= totalPages) {
-                  return (
-                    <Button
-                      key={pageNum}
-                      variant={pageNum === currentPage ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => paginate(pageNum)}
-                      className="w-8 h-8 p-0"
-                    >
-                      {pageNum}
-                    </Button>
-                  );
-                }
-                return null;
-              })}
-            </div>
-            
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={nextPage}
-              disabled={currentPage === totalPages}
-              className="flex items-center gap-1"
-            >
-              Next
-              <ArrowRight size={16} />
-            </Button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-export default InternshipTable;
+      if (field === 'offer_letter_url' || field
