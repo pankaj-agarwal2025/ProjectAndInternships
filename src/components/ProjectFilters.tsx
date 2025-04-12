@@ -70,7 +70,7 @@ const ProjectFilters: React.FC<ProjectFiltersProps> = ({ onFilterChange }) => {
                 <SelectValue placeholder="Select session" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Sessions</SelectItem>
+                <SelectItem value="all">All Sessions</SelectItem>
                 {sessions.map((s) => (
                   <SelectItem key={s} value={s}>{s}</SelectItem>
                 ))}
@@ -85,7 +85,7 @@ const ProjectFilters: React.FC<ProjectFiltersProps> = ({ onFilterChange }) => {
                 <SelectValue placeholder="Select year" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Years</SelectItem>
+                <SelectItem value="all">All Years</SelectItem>
                 {years.map((y) => (
                   <SelectItem key={y} value={y}>{y}</SelectItem>
                 ))}
@@ -100,7 +100,7 @@ const ProjectFilters: React.FC<ProjectFiltersProps> = ({ onFilterChange }) => {
                 <SelectValue placeholder="Select semester" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Semesters</SelectItem>
+                <SelectItem value="all">All Semesters</SelectItem>
                 {semesters.map((s) => (
                   <SelectItem key={s} value={s}>{s}</SelectItem>
                 ))}
@@ -115,7 +115,7 @@ const ProjectFilters: React.FC<ProjectFiltersProps> = ({ onFilterChange }) => {
                 <SelectValue placeholder="Select coordinator" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Coordinators</SelectItem>
+                <SelectItem value="all">All Coordinators</SelectItem>
                 {facultyCoordinators.map((fc) => (
                   <SelectItem key={fc} value={fc}>{fc}</SelectItem>
                 ))}
