@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Table, 
@@ -27,7 +28,8 @@ import { useToast } from '@/components/ui/use-toast';
 import * as XLSX from 'xlsx';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+// @ts-ignore - Missing types for jspdf-autotable
+import autoTable from 'jspdf-autotable';
 
 interface InternshipTableProps {
   filters: Record<string, any>;
@@ -114,15 +116,19 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const { toast } = useToast();
   
+  // Program options
   const programOptions = [
     'BSc (CS)', 'BSc (DS)', 'BSc (Cyber)', 'BCA', 'BCA AI/DS', 
     'BTech CSE', 'BTech FSD', 'BTech UI/UX', 'BTech AI/ML'
   ];
   
+  // Faculty coordinator options
   const facultyCoordinators = ['Dr. Pankaj', 'Dr. Anshu', 'Dr. Meenu', 'Dr. Swati'];
   
+  // Calculate total pages
   const totalPages = Math.ceil(internships.length / itemsPerPage);
   
+  // Get current items for pagination
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const currentInternships = internships.slice(indexOfFirstItem, indexOfLastItem);
@@ -620,11 +626,13 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     try {
       const doc = new jsPDF('landscape');
       
+      // Add title and date
       doc.setFontSize(18);
       doc.text('Internship Data Report', 14, 20);
       doc.setFontSize(11);
       doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 26);
       
+      // Add filter information if any
       if (Object.keys(filters).length > 0) {
         doc.setFontSize(12);
         doc.text('Applied Filters:', 14, 34);
@@ -640,8 +648,10 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         });
       }
       
+      // Get table headers
       const headers = ['Roll No', 'Name', 'Organization', 'Position', 'Program', 'Starting Date', 'Ending Date', 'Duration'];
       
+      // Create table data
       const data = internships.map(internship => [
         internship.roll_no || '',
         internship.name || '',
@@ -653,7 +663,8 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         internship.ending_date ? (internship.internship_duration || '') : 'Ongoing'
       ]);
       
-      doc.autoTable({
+      // Generate table
+      (doc as any).autoTable({
         startY: Object.keys(filters).length > 0 ? 50 : 35,
         head: [headers],
         body: data,
@@ -663,6 +674,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         alternateRowStyles: { fillColor: [245, 245, 245] }
       });
       
+      // Save the PDF
       doc.save('internship_report.pdf');
       
       toast({
@@ -822,6 +834,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     const valueToShow = hasChanges ? editedCells[internship.id][field] : internship[field];
     
     if (isEditing) {
+      // Different input types based on the field
       if (field === 'faculty_coordinator') {
         return (
           <div className="flex items-center border border-blue-300 bg-blue-50 rounded p-1">
@@ -901,6 +914,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         );
       }
     } else {
+      // File upload fields
       if (field === 'offer_letter_url' || field === 'noc_url' || field === 'ppo_url') {
         return (
           <div className="flex items-center space-x-2">
@@ -1201,10 +1215,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure you want to delete this internship?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone.
-            </AlertDialogDescription>
+            <AlertDialogTitle>Are you sure you want to delete this row?</AlertDialogTitle>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
