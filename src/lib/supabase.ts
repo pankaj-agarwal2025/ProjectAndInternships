@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = 'https://ihxuclygrdbdsppjmrpf.supabase.co';
@@ -665,3 +664,67 @@ export async function processInternshipsExcel(excelData: any[], facultyCoordinat
     return null;
   }
 }
+
+// Function to delete a dynamic column
+export const deleteDynamicColumn = async (columnId: string) => {
+  try {
+    // Delete values first
+    const { error: valueError } = await supabase
+      .from('dynamic_column_values')
+      .delete()
+      .eq('column_id', columnId);
+    
+    if (valueError) {
+      console.error('Error deleting dynamic column values:', valueError);
+      throw valueError;
+    }
+    
+    // Then delete the column
+    const { error } = await supabase
+      .from('dynamic_columns')
+      .delete()
+      .eq('id', columnId);
+    
+    if (error) {
+      console.error('Error deleting dynamic column:', error);
+      throw error;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error in deleteDynamicColumn:', error);
+    throw error;
+  }
+};
+
+// Function to delete an internship dynamic column
+export const deleteInternshipDynamicColumn = async (columnId: string) => {
+  try {
+    // Delete values first
+    const { error: valueError } = await supabase
+      .from('internship_dynamic_column_values')
+      .delete()
+      .eq('column_id', columnId);
+    
+    if (valueError) {
+      console.error('Error deleting internship dynamic column values:', valueError);
+      throw valueError;
+    }
+    
+    // Then delete the column
+    const { error } = await supabase
+      .from('internship_dynamic_columns')
+      .delete()
+      .eq('id', columnId);
+    
+    if (error) {
+      console.error('Error deleting internship dynamic column:', error);
+      throw error;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error in deleteInternshipDynamicColumn:', error);
+    throw error;
+  }
+};

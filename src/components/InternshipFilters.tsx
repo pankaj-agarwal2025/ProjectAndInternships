@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { Filter, Calendar } from 'lucide-react';
+import { Filter, Calendar, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -54,6 +53,7 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
   });
   const [dynamicColumns, setDynamicColumns] = useState<any[]>([]);
   const [dynamicFilters, setDynamicFilters] = useState<Record<string, string>>({});
+  const [searchValue, setSearchValue] = useState('');
 
   useEffect(() => {
     fetchDynamicColumns();
@@ -75,6 +75,17 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
     setFilters(prev => ({ ...prev, [field]: value }));
   };
 
+  const handleSearchChange = (value: string) => {
+    setSearchValue(value);
+    // Apply the search filter immediately
+    const newFilters = { ...filters, searchTerm: value };
+    if (!value) {
+      delete newFilters.searchTerm;
+    }
+    setFilters(newFilters);
+    onFilterChange(newFilters);
+  };
+
   const handleDynamicFilterChange = (columnId: string, value: string) => {
     setDynamicFilters(prev => ({ ...prev, [columnId]: value }));
   };
@@ -82,6 +93,13 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
   const applyFilters = () => {
     // Combine regular filters and dynamic filters
     const combinedFilters = { ...filters };
+    
+    // Add dynamic filters
+    Object.entries(dynamicFilters).forEach(([key, value]) => {
+      if (value) {
+        combinedFilters[`dynamic_${key}`] = value;
+      }
+    });
     
     // Remove empty filters
     Object.keys(combinedFilters).forEach(key => {
@@ -108,6 +126,7 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
     
     setFilters(resetRegularFilters);
     setDynamicFilters(resetDynamicFilters);
+    setSearchValue('');
     onFilterChange({});
   };
 
@@ -161,7 +180,7 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
                     <SelectValue placeholder="Select program" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Programs</SelectItem>
+                    <SelectItem value="">All Programs</SelectItem>
                     {programOptions.map(option => (
                       <SelectItem key={option} value={option}>{option}</SelectItem>
                     ))}
@@ -262,20 +281,24 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
               </div>
               
               {/* Dynamic column filters */}
-              {dynamicColumns.map(column => (
-                <div key={column.id} className="space-y-2">
-                  <Label htmlFor={`dynamic-${column.id}`}>{column.name}</Label>
-                  <Input
-                    id={`dynamic-${column.id}`}
-                    placeholder={`Filter by ${column.name.toLowerCase()}`}
-                    value={dynamicFilters[column.id] || ''}
-                    onChange={(e) => handleDynamicFilterChange(column.id, e.target.value)}
-                  />
+              {dynamicColumns.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                  {dynamicColumns.map(column => (
+                    <div key={column.id} className="space-y-2">
+                      <Label htmlFor={`dynamic-${column.id}`}>{column.name}</Label>
+                      <Input
+                        id={`dynamic-${column.id}`}
+                        placeholder={`Filter by ${column.name.toLowerCase()}`}
+                        value={dynamicFilters[column.id] || ''}
+                        onChange={(e) => handleDynamicFilterChange(column.id, e.target.value)}
+                      />
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
             
-            <div className="flex justify-end space-x-2">
+            <div className="flex justify-end space-x-2 mt-4">
               <Button variant="outline" onClick={resetFilters}>
                 Reset
               </Button>
@@ -289,11 +312,8 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
             <Input
               className="w-full sm:w-auto sm:flex-1"
               placeholder="Search by name, roll no, or any field..."
-              value={filters.name}
-              onChange={(e) => {
-                handleFilterChange('name', e.target.value);
-                applyFilters();
-              }}
+              value={searchValue}
+              onChange={(e) => handleSearchChange(e.target.value)}
             />
             
             <Select 
@@ -307,7 +327,7 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
                 <SelectValue placeholder="Faculty Coordinator" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Coordinators</SelectItem>
+                <SelectItem value="">All Coordinators</SelectItem>
                 {facultyCoordinatorOptions.map(option => (
                   <SelectItem key={option} value={option}>{option}</SelectItem>
                 ))}

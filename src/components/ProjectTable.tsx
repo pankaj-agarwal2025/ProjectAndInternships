@@ -5,13 +5,12 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DownloadIcon, FileIcon, Pencil, Save, X, Trash2, FileUp, AlertTriangle } from 'lucide-react';
-import { getProjects, getStudentsByGroupId, updateProject, updateStudent, getDynamicColumns, getDynamicColumnValues, addDynamicColumnValue, deleteProject } from '@/lib/supabase';
+import { DownloadIcon, FileIcon, Pencil, Save, X, Trash2, FileUp, AlertTriangle, Plus } from 'lucide-react';
+import { getProjects, getStudentsByGroupId, updateProject, updateStudent, getDynamicColumns, getDynamicColumnValues, addDynamicColumnValue, deleteProject, deleteDynamicColumn } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
 import * as XLSX from 'xlsx';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { jsPDF } from 'jspdf';
-// @ts-ignore - Missing types for jspdf-autotable
 import autoTable from 'jspdf-autotable';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
@@ -39,6 +38,8 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
   const [newColumnName, setNewColumnName] = useState('');
   const [newColumnType, setNewColumnType] = useState('text');
   const [fileUploading, setFileUploading] = useState<{row: number, col: string} | null>(null);
+  const [deleteColumnConfirmOpen, setDeleteColumnConfirmOpen] = useState(false);
+  const [deleteColumnId, setDeleteColumnId] = useState<string | null>(null);
   const { toast } = useToast();
   
   // Standard columns
@@ -147,12 +148,14 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
         const existingValue = projectData.dynamicColumnValues.find(v => v.column_id === dynamicColId);
         
         if (existingValue) {
-          // Update existing value (not implemented yet in backend)
-          // For now, we'll just update the local state
+          // Update existing value
           const updatedData = [...data];
           const valueIndex = updatedData[row].dynamicColumnValues.findIndex(v => v.column_id === dynamicColId);
           if (valueIndex !== -1) {
             updatedData[row].dynamicColumnValues[valueIndex].value = editValue;
+            
+            // Update in database
+            await addDynamicColumnValue(dynamicColId, projectId, editValue);
           }
           setData(updatedData);
         } else {
@@ -213,7 +216,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
       const fileName = `${colId}_${projectId}_${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
       
       // Upload file to storage
-      const { data: fileData, error: uploadError } = await fetch('/api/upload', {
+      const { data: uploadData, error } = await fetch('/api/upload', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -224,10 +227,10 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
         }),
       }).then(res => res.json());
       
-      if (uploadError) throw new Error(uploadError.message);
+      if (error) throw new Error(error.message);
       
       // Upload the file to the presigned URL
-      await fetch(fileData.signedUrl, {
+      await fetch(uploadData.signedUrl, {
         method: 'PUT',
         headers: {
           'Content-Type': file.type,
@@ -236,7 +239,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
       });
       
       // Update the project with the file URL
-      const fileUrl = fileData.publicUrl;
+      const fileUrl = uploadData.publicUrl;
       await updateProject(projectId, { [colId]: fileUrl });
       
       // Update local state
@@ -308,24 +311,25 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
     
     try {
       // Add dynamic column to database
-      const { data: newColumn, error } = await fetch('/api/add-dynamic-column', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      const { data: newColumn, error } = await supabase
+        .from('dynamic_columns')
+        .insert({
           name: newColumnName,
           type: newColumnType,
-        }),
-      }).then(res => res.json());
+        })
+        .select()
+        .single();
       
-      if (error) throw new Error(error.message);
+      if (error) {
+        console.error('Error adding column:', error);
+        throw error;
+      }
       
       // Update local state
       setDynamicColumns([...dynamicColumns, newColumn]);
       
       toast({
-        title: 'Column Added',
+        title: 'Success',
         description: `The column "${newColumnName}" has been added successfully.`,
       });
       
@@ -334,12 +338,51 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
       setNewColumnType('text');
       setShowAddColumnModal(false);
     } catch (error) {
-      console.error('Error adding column:', error);
+      console.error('Error:', error);
       toast({
-        title: 'Add Column Error',
+        title: 'Error',
         description: 'Failed to add the column. Please try again.',
         variant: 'destructive',
       });
+    }
+  };
+  
+  const handleDeleteColumn = (columnId: string) => {
+    setDeleteColumnId(columnId);
+    setDeleteColumnConfirmOpen(true);
+  };
+  
+  const confirmDeleteColumn = async () => {
+    if (!deleteColumnId) return;
+    
+    try {
+      await deleteDynamicColumn(deleteColumnId);
+      
+      // Remove from local state
+      setDynamicColumns(dynamicColumns.filter(col => col.id !== deleteColumnId));
+      
+      // Also remove values for this column from all projects
+      const updatedData = data.map(item => ({
+        ...item,
+        dynamicColumnValues: item.dynamicColumnValues.filter(val => val.column_id !== deleteColumnId)
+      }));
+      
+      setData(updatedData);
+      
+      toast({
+        title: 'Column Deleted',
+        description: 'The column has been deleted successfully.',
+      });
+    } catch (error) {
+      console.error('Error deleting column:', error);
+      toast({
+        title: 'Delete Error',
+        description: 'Failed to delete the column. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeleteColumnConfirmOpen(false);
+      setDeleteColumnId(null);
     }
   };
   
@@ -511,57 +554,67 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
   };
   
   const handleExportToExcel = () => {
-    // Create a workbook
-    const wb = XLSX.utils.book_new();
-    
-    // Format the data for export
-    const exportData = data.flatMap((item, index) => {
-      const projectData = item.project;
+    try {
+      // Create a workbook
+      const wb = XLSX.utils.book_new();
       
-      return item.students.map((student, studentIndex) => {
-        const row: Record<string, any> = {
-          // Project data
-          'Group No': projectData.group_no,
-          'Title': projectData.title,
-          'Domain': projectData.domain,
-          'Faculty Mentor': projectData.faculty_mentor,
-          'Industry Mentor': projectData.industry_mentor,
-          'Session': projectData.session,
-          'Year': projectData.year,
-          'Semester': projectData.semester,
-          'Faculty Coordinator': projectData.faculty_coordinator,
-          'Progress Form': projectData.progress_form_url || '',
-          'Presentation': projectData.presentation_url || '',
-          'Report': projectData.report_url || '',
+      // Format the data for export
+      const exportData = data.flatMap((item, index) => {
+        const projectData = item.project;
+        
+        return item.students.map((student, studentIndex) => {
+          const row: Record<string, any> = {
+            // Project data
+            'Group No': projectData.group_no,
+            'Title': projectData.title,
+            'Domain': projectData.domain,
+            'Faculty Mentor': projectData.faculty_mentor,
+            'Industry Mentor': projectData.industry_mentor,
+            'Progress Form': projectData.progress_form_url || '',
+            'Presentation': projectData.presentation_url || '',
+            'Report': projectData.report_url || '',
+            
+            // Student data
+            'Roll No': student.roll_no,
+            'Name': student.name,
+            'Email': student.email,
+            'Program': student.program,
+          };
           
-          // Student data
-          'Roll No': student.roll_no,
-          'Name': student.name,
-          'Email': student.email,
-          'Program': student.program,
-        };
-        
-        // Add dynamic columns
-        dynamicColumns.forEach(col => {
-          const valueObj = item.dynamicColumnValues.find(v => v.column_id === col.id);
-          row[col.name] = valueObj?.value || '';
+          // Add dynamic columns
+          dynamicColumns.forEach(col => {
+            const valueObj = item.dynamicColumnValues.find(v => v.column_id === col.id);
+            row[col.name] = valueObj?.value || '';
+          });
+          
+          return row;
         });
-        
-        return row;
       });
-    });
-    
-    // Create worksheet and add to workbook
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    XLSX.utils.book_append_sheet(wb, ws, 'Projects');
-    
-    // Save workbook
-    XLSX.writeFile(wb, 'project_data.xlsx');
+      
+      // Create worksheet and add to workbook
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      XLSX.utils.book_append_sheet(wb, ws, 'Projects');
+      
+      // Save workbook
+      XLSX.writeFile(wb, 'project_data.xlsx');
+      
+      toast({
+        title: 'Success',
+        description: 'Data exported to Excel successfully',
+      });
+    } catch (error) {
+      console.error('Error exporting to Excel:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to export data',
+        variant: 'destructive',
+      });
+    }
   };
   
   const handleExportToPDF = () => {
     try {
-      const doc = new jsPDF('landscape');
+      const doc = new jsPDF('landscape', 'mm', 'a4');
       
       // Add title and date
       doc.setFontSize(18);
@@ -576,11 +629,19 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
         let yPos = 40;
         
         Object.entries(filters).forEach(([key, value]) => {
-          if (value) {
-            const filterName = key.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+          if (value && !key.startsWith('dynamic_')) {
+            const filterName = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
             doc.setFontSize(10);
             doc.text(`${filterName}: ${value}`, 14, yPos);
             yPos += 6;
+          } else if (value && key.startsWith('dynamic_')) {
+            const columnId = key.replace('dynamic_', '');
+            const column = dynamicColumns.find(c => c.id === columnId);
+            if (column) {
+              doc.setFontSize(10);
+              doc.text(`${column.name}: ${value}`, 14, yPos);
+              yPos += 6;
+            }
           }
         });
       }
@@ -589,23 +650,42 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
       const tableData = data.map(item => {
         const project = item.project;
         const students = item.students.map(s => `${s.name} (${s.roll_no})`).join(', ');
+        const programs = [...new Set(item.students.map(s => s.program))].join(', ');
+        
+        // Get dynamic column values
+        const dynamicValues: Record<string, string> = {};
+        dynamicColumns.forEach(col => {
+          const valueObj = item.dynamicColumnValues.find(v => v.column_id === col.id);
+          dynamicValues[col.name] = valueObj?.value || '';
+        });
         
         return [
           project.group_no,
           project.title,
           students,
-          project.program || '',
+          programs || '',
           project.domain,
           project.faculty_mentor,
-          project.session,
-          project.year
+          // Add dynamic column values to the data
+          ...dynamicColumns.map(col => dynamicValues[col.name] || '')
         ];
       });
       
+      // Generate table headers with dynamic columns
+      const headers = [
+        'Group No', 
+        'Title', 
+        'Students', 
+        'Program', 
+        'Domain', 
+        'Faculty Mentor',
+        ...dynamicColumns.map(col => col.name)
+      ];
+      
       // Generate table with autoTable
-      (doc as any).autoTable({
+      autoTable(doc, {
         startY: Object.keys(filters).length > 0 ? 50 : 35,
-        head: [['Group No', 'Title', 'Students', 'Program', 'Domain', 'Faculty Mentor', 'Session', 'Year']],
+        head: [headers],
         body: tableData,
         theme: 'grid',
         styles: { fontSize: 8, cellPadding: 2 },
@@ -678,7 +758,8 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
         
         <div className="flex space-x-2">
           <Button variant="outline" onClick={() => setShowAddColumnModal(true)}>
-            + Add Column
+            <Plus className="h-4 w-4 mr-2" />
+            Add Column
           </Button>
           <Button variant="outline" onClick={handleExportToExcel}>
             <DownloadIcon className="h-4 w-4 mr-2" />
@@ -710,7 +791,9 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
               
               {/* Dynamic columns */}
               {dynamicColumns.length > 0 && (
-                <TableHead>Additional Parameters</TableHead>
+                <TableHead className="relative">
+                  Additional Parameters
+                </TableHead>
               )}
             </TableRow>
           </TableHeader>
@@ -828,7 +911,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
         </div>
       </div>
       
-      {/* Delete Confirmation Dialog */}
+      {/* Delete Project Confirmation Dialog */}
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -842,6 +925,27 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
             <AlertDialogAction 
               className="bg-red-500 hover:bg-red-600"
               onClick={confirmDeleteProject}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      
+      {/* Delete Column Confirmation Dialog */}
+      <AlertDialog open={deleteColumnConfirmOpen} onOpenChange={setDeleteColumnConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Column</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this column and all of its data across all projects. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              className="bg-red-500 hover:bg-red-600"
+              onClick={confirmDeleteColumn}
             >
               Delete
             </AlertDialogAction>

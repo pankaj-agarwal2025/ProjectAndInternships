@@ -7,7 +7,7 @@ import InternshipTable from '@/components/InternshipTable';
 import InternshipFilters from '@/components/InternshipFilters';
 import { Faculty, setupDatabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
-import { PlusCircle, Database, FileText, Download } from 'lucide-react';
+import { PlusCircle, FileText } from 'lucide-react';
 
 const InternshipPortal = () => {
   const navigate = useNavigate();
@@ -98,34 +98,16 @@ const InternshipPortal = () => {
             <Button 
               className="bg-primary hover:bg-primary/90 flex items-center"
               onClick={() => {
-                // Scroll to internship table
-                const internshipTable = document.getElementById('internship-table-container');
-                if (internshipTable) {
-                  internshipTable.scrollIntoView({ behavior: 'smooth' });
-                }
-                // Focus on add new internship button by triggering a click event
-                const addButton = document.querySelector('[data-add-internship]');
-                if (addButton) {
-                  (addButton as HTMLButtonElement).click();
+                // Add new internship directly to the table
+                const addInternshipButton = document.querySelector('[data-add-internship]');
+                if (addInternshipButton) {
+                  (addInternshipButton as HTMLButtonElement).click();
                 }
               }}
+              data-testid="add-new-internship"
             >
               <PlusCircle size={18} className="mr-2" />
               Add New Internship
-            </Button>
-            <Button
-              variant="outline"
-              className="flex items-center"
-              onClick={() => {
-                // The export to PDF functionality is in the InternshipTable component
-                const exportButton = document.querySelector('[data-export-pdf]');
-                if (exportButton) {
-                  (exportButton as HTMLButtonElement).click();
-                }
-              }}
-            >
-              <FileText className="mr-2 h-4 w-4" />
-              Export PDF
             </Button>
           </div>
         </div>

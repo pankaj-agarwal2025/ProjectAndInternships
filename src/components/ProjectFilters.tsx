@@ -4,8 +4,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { getProjects } from '@/lib/supabase';
-import { Plus, Filter } from 'lucide-react';
+import { Plus, Filter, X } from 'lucide-react';
 
 interface ProjectFiltersProps {
   onFilterChange: (filters: Record<string, any>) => void;
@@ -16,10 +17,12 @@ const ProjectFilters: React.FC<ProjectFiltersProps> = ({ onFilterChange }) => {
   const [year, setYear] = useState<string>('');
   const [semester, setSemester] = useState<string>('');
   const [facultyCoordinator, setFacultyCoordinator] = useState<string>('');
+  const [program, setProgram] = useState<string>('');
   
   const [sessions, setSessions] = useState<string[]>([]);
   const [years, setYears] = useState<string[]>([]);
   const [semesters, setSemesters] = useState<string[]>([]);
+  const [programs, setPrograms] = useState<string[]>([]);
   const [facultyCoordinators, setFacultyCoordinators] = useState<string[]>([
     'dr.pankaj', 'dr.anshu', 'dr.meenu', 'dr.swati'
   ]);
@@ -36,10 +39,16 @@ const ProjectFilters: React.FC<ProjectFiltersProps> = ({ onFilterChange }) => {
       const uniqueSessions = [...new Set(projects.map(p => p.session))].filter(Boolean) as string[];
       const uniqueYears = [...new Set(projects.map(p => p.year))].filter(Boolean) as string[];
       const uniqueSemesters = [...new Set(projects.map(p => p.semester))].filter(Boolean) as string[];
+      const uniquePrograms = [...new Set(projects.flatMap(p => {
+        // Attempt to extract program from students
+        const students = p.students || [];
+        return students.map(s => s.program).filter(Boolean);
+      }))].filter(Boolean) as string[];
       
       setSessions(uniqueSessions);
       setYears(uniqueYears);
       setSemesters(uniqueSemesters);
+      setPrograms(uniquePrograms);
     };
     
     fetchFilterOptions();
@@ -48,10 +57,11 @@ const ProjectFilters: React.FC<ProjectFiltersProps> = ({ onFilterChange }) => {
   const handleApplyFilters = () => {
     const filters: Record<string, any> = {};
     
-    if (session) filters.session = session;
-    if (year) filters.year = year;
-    if (semester) filters.semester = semester;
-    if (facultyCoordinator) filters.faculty_coordinator = facultyCoordinator;
+    if (session) filters.session = session === 'all' ? '' : session;
+    if (year) filters.year = year === 'all' ? '' : year;
+    if (semester) filters.semester = semester === 'all' ? '' : semester;
+    if (facultyCoordinator) filters.faculty_coordinator = facultyCoordinator === 'all' ? '' : facultyCoordinator;
+    if (program) filters.program = program === 'all' ? '' : program;
     
     // Add custom filters
     customFilters.forEach(filter => {
@@ -68,6 +78,7 @@ const ProjectFilters: React.FC<ProjectFiltersProps> = ({ onFilterChange }) => {
     setYear('');
     setSemester('');
     setFacultyCoordinator('');
+    setProgram('');
     setCustomFilters([]);
     onFilterChange({});
   };
@@ -134,7 +145,7 @@ const ProjectFilters: React.FC<ProjectFiltersProps> = ({ onFilterChange }) => {
                 <SelectValue placeholder="Select session" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Sessions</SelectItem>
+                <SelectItem value="">All Sessions</SelectItem>
                 {sessions.map((s) => (
                   <SelectItem key={s} value={s}>{s}</SelectItem>
                 ))}
@@ -149,7 +160,7 @@ const ProjectFilters: React.FC<ProjectFiltersProps> = ({ onFilterChange }) => {
                 <SelectValue placeholder="Select year" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Years</SelectItem>
+                <SelectItem value="">All Years</SelectItem>
                 {years.map((y) => (
                   <SelectItem key={y} value={y}>{y}</SelectItem>
                 ))}
@@ -164,7 +175,7 @@ const ProjectFilters: React.FC<ProjectFiltersProps> = ({ onFilterChange }) => {
                 <SelectValue placeholder="Select semester" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Semesters</SelectItem>
+                <SelectItem value="">All Semesters</SelectItem>
                 {semesters.map((s) => (
                   <SelectItem key={s} value={s}>{s}</SelectItem>
                 ))}
@@ -179,9 +190,24 @@ const ProjectFilters: React.FC<ProjectFiltersProps> = ({ onFilterChange }) => {
                 <SelectValue placeholder="Select coordinator" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Coordinators</SelectItem>
+                <SelectItem value="">All Coordinators</SelectItem>
                 {facultyCoordinators.map((fc) => (
                   <SelectItem key={fc} value={fc}>{fc}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="program">Program</Label>
+            <Select value={program} onValueChange={setProgram}>
+              <SelectTrigger id="program">
+                <SelectValue placeholder="Select program" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All Programs</SelectItem>
+                {programs.map((p) => (
+                  <SelectItem key={p} value={p}>{p}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -193,25 +219,24 @@ const ProjectFilters: React.FC<ProjectFiltersProps> = ({ onFilterChange }) => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
             {customFilters.map((filter, index) => (
               <div key={index} className="space-y-2">
-                <Label htmlFor={`custom-filter-${index}`}>{filter.name}</Label>
-                <div className="flex gap-2">
-                  <input
-                    id={`custom-filter-${index}`}
-                    type="text"
-                    value={filter.value}
-                    onChange={(e) => handleCustomFilterChange(index, e.target.value)}
-                    className="flex-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder={`Filter by ${filter.name.toLowerCase()}`}
-                  />
+                <Label htmlFor={`custom-filter-${index}`} className="flex items-center justify-between">
+                  <span>{filter.name}</span>
                   <Button 
                     variant="ghost" 
-                    size="icon" 
+                    size="sm"
                     onClick={() => handleRemoveCustomFilter(index)}
-                    className="text-red-500"
+                    className="h-5 w-5 p-0 text-red-500 hover:text-red-700"
                   >
-                    ✕
+                    <X className="h-4 w-4" />
                   </Button>
-                </div>
+                </Label>
+                <Input
+                  id={`custom-filter-${index}`}
+                  type="text"
+                  value={filter.value}
+                  onChange={(e) => handleCustomFilterChange(index, e.target.value)}
+                  placeholder={`Filter by ${filter.name.toLowerCase()}`}
+                />
               </div>
             ))}
           </div>

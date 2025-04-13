@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -112,20 +111,6 @@ const ProjectPortal = () => {
             >
               <Download className="mr-2 h-4 w-4" />
               Add New Project
-            </Button>
-            <Button
-              variant="outline"
-              className="flex items-center"
-              onClick={() => {
-                // The export to PDF functionality is implemented in the ProjectTable component
-                const exportButton = document.querySelector('[data-export-pdf-button]');
-                if (exportButton) {
-                  (exportButton as HTMLButtonElement).click();
-                }
-              }}
-            >
-              <FileText className="mr-2 h-4 w-4" />
-              Export PDF
             </Button>
           </div>
         </div>

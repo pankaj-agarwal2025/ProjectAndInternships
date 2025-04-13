@@ -23,17 +23,17 @@ import {
   Save,
   Download,
   FileUp,
-  Pencil,
-  Link as LinkIcon,
-  Edit
+  X,
+  Edit,
+  Plus
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import * as XLSX from 'xlsx';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { jsPDF } from 'jspdf';
-// @ts-ignore - Missing types for jspdf-autotable
 import autoTable from 'jspdf-autotable';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { getInternshipDynamicColumns, deleteInternshipDynamicColumn } from '@/lib/supabase';
 
 interface InternshipTableProps {
   filters: Record<string, any>;
@@ -119,12 +119,8 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filteredInternships, setFilteredInternships] = useState<Internship[]>([]);
-  const [fileDialogOpen, setFileDialogOpen] = useState(false);
-  const [currentFileField, setCurrentFileField] = useState<{ id: string, field: string } | null>(null);
-  const [fileUrl, setFileUrl] = useState('');
-  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [deleteColumnConfirmOpen, setDeleteColumnConfirmOpen] = useState(false);
+  const [deleteColumnId, setDeleteColumnId] = useState<string | null>(null);
   const { toast } = useToast();
   
   // Program options
@@ -136,66 +132,18 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
   // Faculty coordinator options
   const facultyCoordinators = ['Dr. Pankaj', 'Dr. Anshu', 'Dr. Meenu', 'Dr. Swati'];
   
-  // Apply search filter whenever searchTerm changes
-  useEffect(() => {
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-    
-    searchTimeoutRef.current = setTimeout(() => {
-      if (!searchTerm.trim()) {
-        setFilteredInternships(internships);
-        return;
-      }
-      
-      const lowerSearchTerm = searchTerm.toLowerCase();
-      const filtered = internships.filter(internship => {
-        return Object.entries(internship).some(([key, value]) => {
-          // Skip non-string fields or specific fields
-          if (
-            typeof value !== 'string' || 
-            key === 'id' || 
-            key === 'offer_letter_url' || 
-            key === 'noc_url' || 
-            key === 'ppo_url' || 
-            key === 'created_at' || 
-            key === 'updated_at'
-          ) {
-            return false;
-          }
-          
-          return value.toLowerCase().includes(lowerSearchTerm);
-        });
-      });
-      
-      setFilteredInternships(filtered);
-      setCurrentPage(1); // Reset to first page when searching
-    }, 300);
-    
-    return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
-    };
-  }, [searchTerm, internships]);
-  
-  // Calculate total pages based on filtered internships
-  const totalPages = Math.ceil(filteredInternships.length / itemsPerPage);
+  // Calculate total pages
+  const totalPages = Math.ceil(internships.length / itemsPerPage);
   
   // Get current items for pagination
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentInternships = filteredInternships.slice(indexOfFirstItem, indexOfLastItem);
+  const currentInternships = internships.slice(indexOfFirstItem, indexOfLastItem);
   
   useEffect(() => {
     fetchInternships();
     fetchDynamicColumns();
   }, [filters]);
-  
-  useEffect(() => {
-    // Set initial filtered internships
-    setFilteredInternships(internships);
-  }, [internships]);
   
   const fetchInternships = async () => {
     setLoading(true);
@@ -205,7 +153,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       // Apply filters if they exist
       if (filters && Object.keys(filters).length > 0) {
         Object.entries(filters).forEach(([key, value]) => {
-          if (value && key !== 'starting_month') {
+          if (value && key !== 'starting_month' && key !== 'searchTerm' && !key.startsWith('dynamic_')) {
             query = query.eq(key, value);
           }
         });
@@ -213,6 +161,12 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         // Special handling for starting_month filter
         if (filters.starting_month) {
           query = query.ilike('starting_date', `%-${filters.starting_month}-%`);
+        }
+        
+        // Special handling for search term
+        if (filters.searchTerm) {
+          const searchTerm = filters.searchTerm.toLowerCase();
+          query = query.or(`roll_no.ilike.%${searchTerm}%,name.ilike.%${searchTerm}%,organization_name.ilike.%${searchTerm}%`);
         }
       }
       
@@ -232,7 +186,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         }));
         
         setInternships(formattedData);
-        setFilteredInternships(formattedData);
         setEditedCells({});
       }
     } catch (error) {
@@ -249,19 +202,8 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
   
   const fetchDynamicColumns = async () => {
     try {
-      const { data, error } = await supabase
-        .from('internship_dynamic_columns')
-        .select('*')
-        .order('created_at', { ascending: true });
-      
-      if (error) {
-        console.error('Error fetching dynamic columns:', error);
-        throw error;
-      }
-      
-      if (data) {
-        setDynamicColumns(data);
-      }
+      const columns = await getInternshipDynamicColumns();
+      setDynamicColumns(columns);
     } catch (error) {
       console.error('Error:', error);
       toast({
@@ -294,38 +236,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     }
   };
   
-  const calculateDuration = (startDate: string, endDate: string) => {
-    if (!startDate || !endDate) return 'Ongoing';
-    
-    try {
-      const start = new Date(formatDateForDB(startDate) || '');
-      const end = new Date(formatDateForDB(endDate) || '');
-      
-      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-        return '-';
-      }
-      
-      const months = differenceInMonths(end, start);
-      let days = differenceInDays(end, start) % 30;
-      
-      // Ensure we don't have negative days
-      if (days < 0) {
-        days += 30;
-      }
-      
-      if (months === 0) {
-        return `${days} days`;
-      } else if (days === 0) {
-        return `${months} months`;
-      } else {
-        return `${months} months, ${days} days`;
-      }
-    } catch (error) {
-      console.error('Error calculating duration:', error);
-      return '-';
-    }
-  };
-  
   const handleEdit = (id: string, field: string, value: string) => {
     setEditedCells(prev => ({
       ...prev,
@@ -350,6 +260,15 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         }
         if (updateData.ending_date) {
           updateData.ending_date = formatDateForDB(updateData.ending_date);
+        }
+        
+        // Calculate internship duration in months if both dates are provided
+        if (updateData.starting_date && updateData.ending_date) {
+          const startDate = new Date(updateData.starting_date);
+          const endDate = new Date(updateData.ending_date);
+          const monthsDiff = differenceInMonths(endDate, startDate);
+          const daysDiff = differenceInDays(endDate, startDate) % 30;
+          updateData.internship_duration = monthsDiff;
         }
         
         // Update internship in database
@@ -389,6 +308,77 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     }
   };
   
+  const handleSaveRow = async (id: string) => {
+    if (!editedCells[id]) return;
+    
+    try {
+      // Prepare data for update
+      const updateData: Record<string, any> = {
+        ...editedCells[id],
+        updated_at: new Date().toISOString()
+      };
+      
+      // Format dates for database
+      if (updateData.starting_date) {
+        updateData.starting_date = formatDateForDB(updateData.starting_date);
+      }
+      if (updateData.ending_date) {
+        updateData.ending_date = formatDateForDB(updateData.ending_date);
+      }
+      
+      // Calculate internship duration if both dates are provided
+      if (updateData.starting_date && updateData.ending_date) {
+        const startDate = new Date(updateData.starting_date);
+        const endDate = new Date(updateData.ending_date);
+        const monthsDiff = differenceInMonths(endDate, startDate);
+        const daysDiff = differenceInDays(endDate, startDate) % 30;
+        updateData.internship_duration = monthsDiff;
+      }
+      
+      // Update internship in database
+      const { error } = await supabase
+        .from('internships')
+        .update(updateData)
+        .eq('id', id);
+      
+      if (error) {
+        console.error(`Error updating internship ${id}:`, error);
+        toast({
+          title: 'Error',
+          description: `Failed to update internship: ${error.message}`,
+          variant: 'destructive',
+        });
+        return;
+      }
+      
+      // Refresh data
+      await fetchInternships();
+      
+      toast({
+        title: 'Success',
+        description: 'Changes saved successfully',
+      });
+      
+      // Remove this internship from edited cells
+      const newEditedCells = { ...editedCells };
+      delete newEditedCells[id];
+      setEditedCells(newEditedCells);
+      
+      // Clear editing state if this row was being edited
+      if (editableCell?.id === id) {
+        setEditableCell(null);
+        setNewValue('');
+      }
+    } catch (error) {
+      console.error('Error saving changes:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to save changes',
+        variant: 'destructive',
+      });
+    }
+  };
+  
   const handleSave = async () => {
     if (!editableCell) return;
     
@@ -408,16 +398,9 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
           : internship
       ));
       
-      // Also update filtered internships
-      setFilteredInternships(filteredInternships.map(internship => 
-        internship.id === id 
-          ? { ...internship, [field]: newValue } 
-          : internship
-      ));
-      
       toast({
         title: 'Cell Updated',
-        description: 'Remember to click "Save All Changes" to persist to database',
+        description: 'Click "Save" in the Actions column to save changes',
       });
     } catch (error) {
       console.error('Error:', error);
@@ -437,6 +420,22 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     setNewValue('');
   };
   
+  const handleCancelRowEdits = (id: string) => {
+    // Remove this internship from edited cells
+    const newEditedCells = { ...editedCells };
+    delete newEditedCells[id];
+    setEditedCells(newEditedCells);
+    
+    // Clear editing state if this row was being edited
+    if (editableCell?.id === id) {
+      setEditableCell(null);
+      setNewValue('');
+    }
+    
+    // Refresh to revert changes
+    fetchInternships();
+  };
+  
   const handleDelete = async () => {
     if (!deleteId) return;
     
@@ -453,7 +452,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       
       // Update local state
       setInternships(internships.filter(internship => internship.id !== deleteId));
-      setFilteredInternships(filteredInternships.filter(internship => internship.id !== deleteId));
       
       toast({
         title: 'Success',
@@ -520,6 +518,37 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         description: 'Failed to add column',
         variant: 'destructive',
       });
+    }
+  };
+  
+  const handleDeleteColumn = (columnId: string) => {
+    setDeleteColumnId(columnId);
+    setDeleteColumnConfirmOpen(true);
+  };
+  
+  const confirmDeleteColumn = async () => {
+    if (!deleteColumnId) return;
+    
+    try {
+      await deleteInternshipDynamicColumn(deleteColumnId);
+      
+      // Update local state
+      setDynamicColumns(dynamicColumns.filter(col => col.id !== deleteColumnId));
+      
+      toast({
+        title: 'Success',
+        description: 'Column deleted successfully',
+      });
+    } catch (error) {
+      console.error('Error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete column',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeleteColumnId(null);
+      setDeleteColumnConfirmOpen(false);
     }
   };
   
@@ -606,19 +635,11 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
           .from('documents')
           .getPublicUrl(data.path);
         
-        // Update internship with file URL
-        const { error: updateError } = await supabase
-          .from('internships')
-          .update({
-            [field]: publicURLData.publicUrl,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', id);
-        
-        if (updateError) {
-          console.error('Error updating internship with file URL:', updateError);
-          throw updateError;
-        }
+        // Update edited cells state with file URL
+        setEditedCells(prev => ({
+          ...prev,
+          [id]: { ...prev[id], [field]: publicURLData.publicUrl }
+        }));
         
         // Update local state
         setInternships(internships.map(internship => 
@@ -627,15 +648,9 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
             : internship
         ));
         
-        setFilteredInternships(filteredInternships.map(internship => 
-          internship.id === id 
-            ? { ...internship, [field]: publicURLData.publicUrl } 
-            : internship
-        ));
-        
         toast({
           title: 'Success',
-          description: 'File uploaded successfully',
+          description: 'File uploaded successfully. Click "Save" to save changes.',
         });
       }
     } catch (error) {
@@ -650,62 +665,8 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     }
   };
   
-  const handleFileUrlSave = async () => {
-    if (!currentFileField) return;
-    
-    try {
-      const { id, field } = currentFileField;
-      
-      // Update the database
-      const { error } = await supabase
-        .from('internships')
-        .update({
-          [field]: fileUrl,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', id);
-      
-      if (error) {
-        console.error('Error updating file URL:', error);
-        throw error;
-      }
-      
-      // Update local state
-      setInternships(internships.map(internship => 
-        internship.id === id 
-          ? { ...internship, [field]: fileUrl } 
-          : internship
-      ));
-      
-      setFilteredInternships(filteredInternships.map(internship => 
-        internship.id === id 
-          ? { ...internship, [field]: fileUrl } 
-          : internship
-      ));
-      
-      toast({
-        title: 'Success',
-        description: 'File URL updated successfully',
-      });
-      
-      // Close the dialog
-      setFileDialogOpen(false);
-      setCurrentFileField(null);
-      setFileUrl('');
-    } catch (error) {
-      console.error('Error:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to update file URL',
-        variant: 'destructive',
-      });
-    }
-  };
-  
-  const openUrlDialog = (id: string, field: string, currentUrl: string) => {
-    setCurrentFileField({ id, field });
-    setFileUrl(currentUrl || '');
-    setFileDialogOpen(true);
+  const handleURLInput = (id: string, field: string) => {
+    handleEdit(id, field, internships.find(i => i.id === id)?.[field] || '');
   };
   
   const handleAddInternship = async () => {
@@ -742,7 +703,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         };
         
         setInternships([newInternship, ...internships]);
-        setFilteredInternships([newInternship, ...filteredInternships]);
         
         toast({
           title: 'Success',
@@ -782,13 +742,8 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
             exportData.ending_date = `${year}-${month}-${day}`;
           }
           
-          // Calculate duration in months and days
-          if (exportData.starting_date && exportData.ending_date) {
-            exportData.internship_duration = calculateDuration(
-              internship.starting_date,
-              internship.ending_date
-            );
-          } else {
+          // If no ending date, show "Ongoing" for duration
+          if (!exportData.ending_date) {
             exportData.internship_duration = 'Ongoing';
           }
           
@@ -834,11 +789,23 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         let yPos = 40;
         
         Object.entries(filters).forEach(([key, value]) => {
-          if (value) {
+          if (value && key !== 'searchTerm' && !key.startsWith('dynamic_')) {
             const filterName = key.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
             doc.setFontSize(10);
             doc.text(`${filterName}: ${value}`, 14, yPos);
             yPos += 6;
+          } else if (value && key === 'searchTerm') {
+            doc.setFontSize(10);
+            doc.text(`Search Term: ${value}`, 14, yPos);
+            yPos += 6;
+          } else if (value && key.startsWith('dynamic_')) {
+            const columnId = key.replace('dynamic_', '');
+            const column = dynamicColumns.find(c => c.id === columnId);
+            if (column) {
+              doc.setFontSize(10);
+              doc.text(`${column.name}: ${value}`, 14, yPos);
+              yPos += 6;
+            }
           }
         });
       }
@@ -846,22 +813,45 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       // Get table headers
       const headers = ['Roll No', 'Name', 'Organization', 'Position', 'Program', 'Starting Date', 'Ending Date', 'Duration'];
       
-      // Create table data
-      const data = filteredInternships.map(internship => [
-        internship.roll_no || '',
-        internship.name || '',
-        internship.organization_name || '',
-        internship.position || '',
-        internship.program || '',
-        internship.starting_date || '',
-        internship.ending_date || '',
-        internship.ending_date && internship.starting_date
-          ? calculateDuration(internship.starting_date, internship.ending_date)
-          : 'Ongoing'
-      ]);
+      // Add dynamic column headers
+      dynamicColumns.forEach(column => {
+        headers.push(column.name);
+      });
       
-      // Generate table
-      (doc as any).autoTable({
+      // Create table data
+      const data = await Promise.all(internships.map(async (internship) => {
+        const row = [
+          internship.roll_no || '',
+          internship.name || '',
+          internship.organization_name || '',
+          internship.position || '',
+          internship.program || '',
+          internship.starting_date || '',
+          internship.ending_date || '',
+          getDurationText(internship) || ''
+        ];
+        
+        // Add dynamic column values
+        for (const column of dynamicColumns) {
+          try {
+            const { data } = await supabase
+              .from('internship_dynamic_column_values')
+              .select('value')
+              .eq('internship_id', internship.id)
+              .eq('column_id', column.id)
+              .single();
+            
+            row.push(data?.value || '');
+          } catch (error) {
+            row.push('');
+          }
+        }
+        
+        return row;
+      }));
+      
+      // Generate table with autoTable
+      autoTable(doc, {
         startY: Object.keys(filters).length > 0 ? 50 : 35,
         head: [headers],
         body: data,
@@ -888,145 +878,24 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     }
   };
   
-  const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) return;
-    
-    const file = e.target.files[0];
-    const reader = new FileReader();
-    
-    reader.onload = async (e) => {
-      try {
-        if (!e.target || !e.target.result) return;
-        
-        const data = new Uint8Array(e.target.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        
-        // Get first worksheet
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        
-        // Convert to JSON
-        const jsonData = XLSX.utils.sheet_to_json(worksheet);
-        
-        // Track results
-        let updated = 0;
-        let inserted = 0;
-        let errors = 0;
-        
-        // Insert into database
-        for (const row of jsonData) {
-          try {
-            const internshipData: Record<string, any> = {};
-            
-            // Map Excel columns to database columns
-            Object.entries(row).forEach(([key, value]) => {
-              const dbKey = key.toLowerCase().replace(/\s+/g, '_');
-              
-              // Handle different data types
-              if (typeof value === 'string') {
-                internshipData[dbKey] = value;
-              } else if (value instanceof Date) {
-                internshipData[dbKey] = value.toISOString().split('T')[0];
-              } else {
-                internshipData[dbKey] = value;
-              }
-              
-              // Handle date fields
-              if (dbKey === 'starting_date' || dbKey === 'ending_date') {
-                // Try to fix date format
-                if (typeof value === 'string') {
-                  if (/^\d{2}-\d{2}-\d{4}$/.test(value)) {
-                    // If date is in dd-mm-yyyy format, convert to yyyy-mm-dd
-                    const [day, month, year] = value.split('-');
-                    internshipData[dbKey] = `${year}-${month}-${day}`;
-                  } else if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-                    // Already in yyyy-mm-dd format
-                    internshipData[dbKey] = value;
-                  } else if (/^\d+$/.test(value.toString())) {
-                    // If date is in Excel serial number format
-                    const excelSerialDate = parseInt(value.toString());
-                    const jsDate = new Date(Math.floor((excelSerialDate - 25569) * 86400 * 1000));
-                    internshipData[dbKey] = jsDate.toISOString().split('T')[0];
-                  }
-                } else if (typeof value === 'number') {
-                  // If date is in Excel serial number format
-                  const jsDate = new Date(Math.floor((value - 25569) * 86400 * 1000));
-                  internshipData[dbKey] = jsDate.toISOString().split('T')[0];
-                }
-              }
-            });
-            
-            // Check if this is an update or insert
-            if (internshipData.roll_no && internshipData.program) {
-              // First check if record exists
-              const { data: existingData, error: queryError } = await supabase
-                .from('internships')
-                .select('id')
-                .eq('roll_no', internshipData.roll_no)
-                .eq('program', internshipData.program);
-              
-              if (queryError) throw queryError;
-              
-              if (existingData && existingData.length > 0) {
-                // Update existing record
-                const { error: updateError } = await supabase
-                  .from('internships')
-                  .update(internshipData)
-                  .eq('id', existingData[0].id);
-                
-                if (updateError) throw updateError;
-                updated++;
-              } else {
-                // Insert new record
-                const { error: insertError } = await supabase
-                  .from('internships')
-                  .insert(internshipData);
-                
-                if (insertError) throw insertError;
-                inserted++;
-              }
-            } else {
-              // Insert new record
-              const { error: insertError } = await supabase
-                .from('internships')
-                .insert(internshipData);
-              
-              if (insertError) throw insertError;
-              inserted++;
-            }
-          } catch (rowError) {
-            console.error('Error processing row:', rowError, row);
-            errors++;
-          }
-        }
-        
-        toast({
-          title: 'Import Complete',
-          description: `${inserted} records added, ${updated} records updated, ${errors} errors encountered.`,
-        });
-        
-        // Refresh data
-        fetchInternships();
-      } catch (error) {
-        console.error('Error importing Excel:', error);
-        toast({
-          title: 'Error',
-          description: 'Failed to import data',
-          variant: 'destructive',
-        });
-      }
-    };
-    
-    reader.readAsArrayBuffer(file);
-  };
-  
-  // Calculate internship duration in months and days
-  const getInternshipDuration = (internship: Internship) => {
+  // Calculate internship duration and get formatted string
+  const getDurationText = (internship: Internship) => {
     if (!internship.starting_date || !internship.ending_date) {
       return <span className="text-blue-500 font-medium">Ongoing</span>;
     }
     
-    return calculateDuration(internship.starting_date, internship.ending_date);
+    try {
+      const startDate = new Date(formatDateForDB(internship.starting_date) || '');
+      const endDate = new Date(formatDateForDB(internship.ending_date) || '');
+      
+      const monthsDiff = differenceInMonths(endDate, startDate);
+      const remainingDays = differenceInDays(endDate, startDate) % 30;
+      
+      return `${monthsDiff} month${monthsDiff !== 1 ? 's' : ''}, ${remainingDays} day${remainingDays !== 1 ? 's' : ''}`;
+    } catch (error) {
+      console.error("Error calculating duration:", error);
+      return internship.internship_duration ? `${internship.internship_duration} months` : '-';
+    }
   };
   
   // Page navigation
@@ -1117,6 +986,20 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
             <Button size="sm" variant="ghost" onClick={handleCancel} className="ml-1 text-red-600">✕</Button>
           </div>
         );
+      } else if (field === 'offer_letter_url' || field === 'noc_url' || field === 'ppo_url') {
+        return (
+          <div className="flex items-center border border-blue-300 bg-blue-50 rounded p-1">
+            <Input
+              value={newValue}
+              onChange={(e) => setNewValue(e.target.value)}
+              className="w-full p-1 border-none bg-transparent focus:outline-none"
+              placeholder="Enter URL"
+              autoFocus
+            />
+            <Button size="sm" variant="ghost" onClick={handleSave} className="ml-1 text-green-600">✓</Button>
+            <Button size="sm" variant="ghost" onClick={handleCancel} className="ml-1 text-red-600">✕</Button>
+          </div>
+        );
       } else {
         return (
           <div className="flex items-center border border-blue-300 bg-blue-50 rounded p-1">
@@ -1132,391 +1015,434 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         );
       }
     } else {
-      // File upload fields
+      // Handle file/URL fields
       if (field === 'offer_letter_url' || field === 'noc_url' || field === 'ppo_url') {
         return (
-          <div className="flex items-center space-x-2">
-            {valueToShow ? (
-              <div className="flex items-center space-x-2">
-                <a 
-                  href={valueToShow} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-blue-500 hover:text-blue-700 flex items-center"
-                >
-                  <FileText size={16} className="mr-1" />
-                  View
-                </a>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 w-7 p-0"
-                  onClick={() => openUrlDialog(internship.id, field, valueToShow)}
-                >
-                  <Edit size={14} />
-                </Button>
-              </div>
-            ) : (
-              <div className="flex items-center space-x-2">
-                <div className="relative">
-                  <input
-                    type="file"
-                    id={`file-upload-${internship.id}-${field}`}
-                    className="sr-only"
-                    onChange={(e) => handleFileUpload(e, internship.id, field)}
-                    accept=".pdf,.doc,.docx"
-                  />
-                  <label
-                    htmlFor={`file-upload-${internship.id}-${field}`}
-                    className={`cursor-pointer text-gray-500 hover:text-blue-500 flex items-center ${
-                      fileUploading && fileUploading.id === internship.id && fileUploading.field === field
-                        ? 'opacity-50 pointer-events-none'
-                        : ''
-                    }`}
-                  >
-                    <FileUp size={16} className="mr-1" />
-                    {fileUploading && fileUploading.id === internship.id && fileUploading.field === field
-                      ? 'Uploading...'
-                      : 'Upload'}
-                  </label>
-                </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 w-7 p-0"
-                  onClick={() => openUrlDialog(internship.id, field, '')}
-                >
-                  <LinkIcon size={14} />
-                </Button>
-              </div>
+          <div className="flex flex-col space-y-2">
+            {valueToShow && (
+              <a
+                href={valueToShow}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center text-primary hover:text-primary-dark"
+              >
+                <FileText className="h-4 w-4 mr-1" />
+                View Document
+              </a>
             )}
+            <div className="flex items-center space-x-2">
+              <div className="relative">
+                <input
+                  type="file"
+                  id={`file-${internship.id}-${field}`}
+                  className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                  onChange={(e) => handleFileUpload(e, internship.id, field)}
+                  disabled={!!fileUploading}
+                />
+                <label
+                  htmlFor={`file-${internship.id}-${field}`}
+                  className={`text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 cursor-pointer ${
+                    fileUploading?.id === internship.id && fileUploading?.field === field
+                      ? 'opacity-50 cursor-wait'
+                      : ''
+                  }`}
+                >
+                  {fileUploading?.id === internship.id && fileUploading?.field === field
+                    ? 'Uploading...'
+                    : 'Upload File'}
+                </label>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 w-6 p-0"
+                onClick={() => handleURLInput(internship.id, field)}
+              >
+                <Edit className="h-3 w-3" />
+              </Button>
+            </div>
           </div>
         );
       }
       
+      // Handle duration field
       if (field === 'internship_duration') {
-        return <div>{getInternshipDuration(internship)}</div>;
+        return getDurationText(internship);
       }
       
-      if (field !== 'id' && 
-          field !== 'created_at' && 
-          field !== 'updated_at') {
-        return (
-          <div
-            onClick={() => handleEdit(internship.id, field, valueToShow || '')}
-            className={`cursor-pointer min-h-[20px] ${
-              hasChanges ? 'bg-yellow-50 dark:bg-yellow-900/20' : ''
-            }`}
-          >
+      // Handle other fields
+      return (
+        <div className="flex items-center justify-between group">
+          <span className={hasChanges ? 'font-medium text-blue-600' : ''}>
             {valueToShow || '-'}
-          </div>
-        );
-      }
-      
-      return <div>{valueToShow || '-'}</div>;
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100"
+            onClick={() => handleEdit(internship.id, field, valueToShow || '')}
+          >
+            <Edit className="h-3 w-3" />
+          </Button>
+        </div>
+      );
     }
   };
   
+  if (loading) {
+    return (
+      <div className="p-8 text-center">
+        <div className="animate-pulse">Loading internship data...</div>
+      </div>
+    );
+  }
+  
   return (
     <div>
-      <div className="flex justify-between items-center mb-4 p-4">
-        <div className="flex space-x-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleAddInternship}
-            data-add-internship
-          >
-            + Add New Row
-          </Button>
-          
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowAddColumn(!showAddColumn)}
-          >
-            + Add Column
-          </Button>
-          
-          <div className="relative w-64">
-            <Input
-              placeholder="Search by name, roll no, or any field"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-8"
-            />
-            <div className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400">
-              <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M10 6.5C10 8.433 8.433 10 6.5 10C4.567 10 3 8.433 3 6.5C3 4.567 4.567 3 6.5 3C8.433 3 10 4.567 10 6.5ZM9.30884 10.0159C8.53901 10.6318 7.56251 11 6.5 11C4.01472 11 2 8.98528 2 6.5C2 4.01472 4.01472 2 6.5 2C8.98528 2 11 4.01472 11 6.5C11 7.56251 10.6318 8.53901 10.0159 9.30884L12.8536 12.1464C13.0488 12.3417 13.0488 12.6583 12.8536 12.8536C12.6583 13.0488 12.3417 13.0488 12.1464 12.8536L9.30884 10.0159Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd"></path>
-              </svg>
-            </div>
-          </div>
+      <div className="p-4 border-b flex justify-between items-center">
+        <div className="flex items-center space-x-2">
+          <span>Show</span>
+          <Select value={itemsPerPage.toString()} onValueChange={(value) => setItemsPerPage(Number(value))}>
+            <SelectTrigger className="w-16">
+              <SelectValue placeholder={itemsPerPage.toString()} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="10">10</SelectItem>
+              <SelectItem value="25">25</SelectItem>
+              <SelectItem value="50">50</SelectItem>
+              <SelectItem value="100">100</SelectItem>
+            </SelectContent>
+          </Select>
+          <span>entries</span>
         </div>
         
-        <div className="flex space-x-2">
-          {Object.keys(editedCells).length > 0 && (
-            <Button
-              size="sm"
-              className="flex items-center"
-              onClick={handleSaveAll}
-            >
-              <Save className="mr-1 h-4 w-4" />
-              Save All Changes
-            </Button>
-          )}
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            className="ml-auto flex items-center"
+            onClick={() => setShowAddColumn(true)}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add Column
+          </Button>
           
-          <Button
-            variant="outline"
-            size="sm"
+          <Button 
+            variant="outline" 
             className="flex items-center"
             onClick={exportToExcel}
           >
-            <Download className="mr-1 h-4 w-4" />
+            <Download className="mr-2 h-4 w-4" />
             Export Excel
           </Button>
           
-          <Button
-            variant="outline"
-            size="sm"
+          <Button 
+            variant="outline" 
             className="flex items-center"
             onClick={exportToPDF}
             data-export-pdf
           >
-            <FileText className="mr-1 h-4 w-4" />
+            <FileText className="mr-2 h-4 w-4" />
             Export PDF
           </Button>
           
-          <div className="relative">
-            <input
-              type="file"
-              id="excel-import"
-              className="sr-only"
-              onChange={handleImportExcel}
-              accept=".xlsx,.xls"
-            />
-            <label
-              htmlFor="excel-import"
-              className="cursor-pointer inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 px-3 border border-input bg-background hover:bg-accent hover:text-accent-foreground"
-            >
-              <FileUp className="mr-1 h-4 w-4" />
-              Import Excel
-            </label>
-          </div>
+          <Button 
+            variant="default" 
+            className="flex items-center"
+            onClick={handleAddInternship}
+            data-add-internship
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add Internship
+          </Button>
         </div>
       </div>
       
-      {showAddColumn && (
-        <div className="p-4 bg-gray-50 dark:bg-gray-800 mb-4 rounded-md border">
-          <div className="text-sm font-medium mb-2">Add New Column</div>
-          <div className="flex space-x-2">
-            <Input
-              placeholder="Column Name"
-              value={newColumnName}
-              onChange={(e) => setNewColumnName(e.target.value)}
-              className="w-60"
-            />
-            <select
-              value={newColumnType}
-              onChange={(e) => setNewColumnType(e.target.value)}
-              className="border border-gray-300 rounded-md px-3 py-1 bg-white dark:bg-gray-700 dark:border-gray-600"
-            >
-              <option value="text">Text</option>
-              <option value="number">Number</option>
-              <option value="date">Date</option>
-            </select>
-            <Button onClick={handleAddColumn}>Add</Button>
-            <Button variant="ghost" onClick={() => setShowAddColumn(false)}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      )}
-      
-      {loading ? (
-        <div className="text-center py-8">
-          <div className="animate-pulse">Loading...</div>
-        </div>
-      ) : filteredInternships.length === 0 ? (
-        <div className="text-center py-8 text-gray-500">
-          {searchTerm ? 
-            'No matching internships found. Try a different search term.' :
-            'No internship data found. Add a new internship or import from Excel.'
-          }
-        </div>
-      ) : (
-        <>
-          <div className="rounded-md border overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-14">Actions</TableHead>
-                  <TableHead>Roll No</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>Domain</TableHead>
-                  <TableHead>Session</TableHead>
-                  <TableHead>Year</TableHead>
-                  <TableHead>Semester</TableHead>
-                  <TableHead>Program</TableHead>
-                  <TableHead>Organization</TableHead>
-                  <TableHead>Position</TableHead>
-                  <TableHead>Starting Date</TableHead>
-                  <TableHead>Ending Date</TableHead>
-                  <TableHead>Duration</TableHead>
-                  <TableHead>Faculty Coordinator</TableHead>
-                  <TableHead>Offer Letter</TableHead>
-                  <TableHead>NOC</TableHead>
-                  <TableHead>PPO</TableHead>
-                  
-                  {dynamicColumns.map((column) => (
-                    <TableHead key={column.id}>{column.name}</TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {currentInternships.map((internship) => (
-                  <TableRow key={internship.id}>
+      {currentInternships.length > 0 ? (
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[120px]">Actions</TableHead>
+                <TableHead>Roll No</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead>Organization</TableHead>
+                <TableHead>Position</TableHead>
+                <TableHead>Program</TableHead>
+                <TableHead>Domain</TableHead>
+                <TableHead>Starting Date</TableHead>
+                <TableHead>Ending Date</TableHead>
+                <TableHead>Duration</TableHead>
+                <TableHead>Offer Letter</TableHead>
+                <TableHead>NOC</TableHead>
+                <TableHead>PPO</TableHead>
+                {/* Dynamic columns */}
+                {dynamicColumns.map((column) => (
+                  <TableHead key={column.id} className="relative">
+                    <div className="flex items-center justify-between pr-8">
+                      <span>{column.name}</span>
+                      <Button
+                        variant="ghost"
+                        className="h-6 w-6 p-0 absolute right-2 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100"
+                        onClick={() => handleDeleteColumn(column.id)}
+                      >
+                        <X className="h-4 w-4 text-red-500" />
+                      </Button>
+                    </div>
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {currentInternships.map((internship) => {
+                const hasEdits = !!editedCells[internship.id];
+                
+                return (
+                  <TableRow key={internship.id} className={hasEdits ? 'bg-blue-50' : ''}>
                     <TableCell>
-                      <div className="flex space-x-1">
+                      <div className="flex items-center space-x-1">
+                        {hasEdits ? (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0 text-green-600"
+                              onClick={() => handleSaveRow(internship.id)}
+                              title="Save changes"
+                            >
+                              <Save className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0 text-red-600"
+                              onClick={() => handleCancelRowEdits(internship.id)}
+                              title="Cancel changes"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0 text-green-600"
+                            onClick={() => handleEdit(internship.id, 'name', internship.name || '')}
+                            title="Edit"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        )}
                         <Button
-                          variant="ghost"
                           size="sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0 text-red-600"
                           onClick={() => confirmDelete(internship.id)}
-                          className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
+                          title="Delete"
                         >
-                          <Trash2 size={16} />
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </TableCell>
                     <TableCell>{renderCell(internship, 'roll_no', 'Roll No')}</TableCell>
                     <TableCell>{renderCell(internship, 'name', 'Name')}</TableCell>
-                    <TableCell>{renderCell(internship, 'email', 'Email')}</TableCell>
-                    <TableCell>{renderCell(internship, 'phone_no', 'Phone')}</TableCell>
-                    <TableCell>{renderCell(internship, 'domain', 'Domain')}</TableCell>
-                    <TableCell>{renderCell(internship, 'session', 'Session')}</TableCell>
-                    <TableCell>{renderCell(internship, 'year', 'Year')}</TableCell>
-                    <TableCell>{renderCell(internship, 'semester', 'Semester')}</TableCell>
-                    <TableCell>{renderCell(internship, 'program', 'Program')}</TableCell>
                     <TableCell>{renderCell(internship, 'organization_name', 'Organization')}</TableCell>
                     <TableCell>{renderCell(internship, 'position', 'Position')}</TableCell>
+                    <TableCell>{renderCell(internship, 'program', 'Program')}</TableCell>
+                    <TableCell>{renderCell(internship, 'domain', 'Domain')}</TableCell>
                     <TableCell>{renderCell(internship, 'starting_date', 'Starting Date')}</TableCell>
                     <TableCell>{renderCell(internship, 'ending_date', 'Ending Date')}</TableCell>
                     <TableCell>{renderCell(internship, 'internship_duration', 'Duration')}</TableCell>
-                    <TableCell>{renderCell(internship, 'faculty_coordinator', 'Faculty Coordinator')}</TableCell>
                     <TableCell>{renderCell(internship, 'offer_letter_url', 'Offer Letter')}</TableCell>
                     <TableCell>{renderCell(internship, 'noc_url', 'NOC')}</TableCell>
                     <TableCell>{renderCell(internship, 'ppo_url', 'PPO')}</TableCell>
                     
+                    {/* Dynamic columns */}
                     {dynamicColumns.map((column) => (
                       <TableCell key={column.id}>
-                        <DynamicColumnValue
-                          internshipId={internship.id}
-                          columnId={column.id}
-                        />
+                        <div className="flex items-center justify-between group">
+                          <DynamicColumnValue 
+                            internshipId={internship.id} 
+                            columnId={column.id} 
+                          />
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100"
+                            onClick={() => {
+                              const value = document.querySelector(`[data-dynamic-value="${internship.id}-${column.id}"]`)?.textContent || '';
+                              handleDynamicColumnValueChange(internship.id, column.id, value);
+                            }}
+                          >
+                            <Edit className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </TableCell>
                     ))}
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      ) : (
+        <div className="text-center py-8">
+          <p>No internships found. Use the "Add Internship" button to create a new entry.</p>
+        </div>
+      )}
+      
+      {/* Pagination */}
+      {internships.length > 0 && (
+        <div className="flex items-center justify-between p-4 border-t">
+          <div>
+            Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, internships.length)} of {internships.length} entries
           </div>
           
-          {filteredInternships.length > itemsPerPage && (
-            <div className="flex justify-between items-center mt-4 p-2">
-              <div className="text-sm text-gray-600">
-                Showing {indexOfFirstItem + 1} to{' '}
-                {Math.min(indexOfLastItem, filteredInternships.length)} of{' '}
-                {filteredInternships.length} entries
-              </div>
-              <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={prevPage}
+              disabled={currentPage === 1}
+              className={currentPage === 1 ? 'opacity-50 cursor-not-allowed' : ''}
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              // Calculate page numbers to show around current page
+              let pageNum;
+              if (totalPages <= 5) {
+                pageNum = i + 1;
+              } else if (currentPage <= 3) {
+                pageNum = i + 1;
+              } else if (currentPage >= totalPages - 2) {
+                pageNum = totalPages - 4 + i;
+              } else {
+                pageNum = currentPage - 2 + i;
+              }
+              
+              return (
                 <Button
-                  variant="outline"
+                  key={pageNum}
+                  variant={currentPage === pageNum ? 'default' : 'outline'}
                   size="sm"
-                  onClick={prevPage}
-                  disabled={currentPage === 1}
+                  onClick={() => paginate(pageNum)}
                 >
-                  <ArrowLeft size={16} />
+                  {pageNum}
                 </Button>
-                <div className="flex space-x-1">
-                  {Array.from({ length: Math.min(totalPages, 5) }).map((_, i) => {
-                    let pageNum = currentPage;
-                    if (totalPages <= 5) {
-                      pageNum = i + 1;
-                    } else {
-                      if (currentPage <= 3) {
-                        pageNum = i + 1;
-                      } else if (currentPage >= totalPages - 2) {
-                        pageNum = totalPages - 4 + i;
-                      } else {
-                        pageNum = currentPage - 2 + i;
-                      }
-                    }
-                    
-                    return (
-                      <Button
-                        key={pageNum}
-                        variant={currentPage === pageNum ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => paginate(pageNum)}
-                        className="w-8 h-8 p-0"
-                      >
-                        {pageNum}
-                      </Button>
-                    );
-                  })}
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={nextPage}
-                  disabled={currentPage === totalPages}
-                >
-                  <ArrowRight size={16} />
-                </Button>
-              </div>
-            </div>
-          )}
-        </>
+              );
+            })}
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={nextPage}
+              disabled={currentPage === totalPages}
+              className={currentPage === totalPages ? 'opacity-50 cursor-not-allowed' : ''}
+            >
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
       )}
       
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure you want to delete this row?</AlertDialogTitle>
+            <AlertDialogTitle>Delete Internship</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this internship? This action cannot be undone.
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-red-500 hover:bg-red-600">
+            <AlertDialogAction 
+              className="bg-red-500 hover:bg-red-600"
+              onClick={handleDelete}
+            >
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
       
-      {/* File URL Dialog */}
-      <Dialog open={fileDialogOpen} onOpenChange={setFileDialogOpen}>
+      {/* Delete Column Confirmation Dialog */}
+      <AlertDialog open={deleteColumnConfirmOpen} onOpenChange={setDeleteColumnConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Column</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this column and all of its data across all internships. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              className="bg-red-500 hover:bg-red-600"
+              onClick={confirmDeleteColumn}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      
+      {/* Add Column Dialog */}
+      <Dialog open={showAddColumn} onOpenChange={setShowAddColumn}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Enter File URL</DialogTitle>
+            <DialogTitle>Add Custom Column</DialogTitle>
+            <DialogDescription>
+              Add a new column to track additional internship information.
+            </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <Input
-              value={fileUrl}
-              onChange={(e) => setFileUrl(e.target.value)}
-              placeholder="https://example.com/file.pdf"
-              className="w-full"
-            />
+          
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <label htmlFor="column-name" className="text-sm font-medium">
+                Column Name
+              </label>
+              <Input
+                id="column-name"
+                value={newColumnName}
+                onChange={(e) => setNewColumnName(e.target.value)}
+                placeholder="e.g., Internship Status"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <label htmlFor="column-type" className="text-sm font-medium">
+                Column Type
+              </label>
+              <Select
+                value={newColumnType}
+                onValueChange={setNewColumnType}
+              >
+                <SelectTrigger id="column-type">
+                  <SelectValue placeholder="Select a column type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="text">Text</SelectItem>
+                  <SelectItem value="number">Number</SelectItem>
+                  <SelectItem value="date">Date</SelectItem>
+                  <SelectItem value="boolean">Yes/No</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setFileDialogOpen(false)}>
+          
+          <div className="flex justify-end space-x-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowAddColumn(false)}
+            >
               Cancel
             </Button>
-            <Button onClick={handleFileUrlSave}>
-              Save
+            <Button onClick={handleAddColumn}>
+              Add Column
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
