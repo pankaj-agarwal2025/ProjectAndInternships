@@ -63,6 +63,22 @@ export interface Internship {
   updated_at: string;
 }
 
+export interface InternshipDynamicColumn {
+  id: string;
+  name: string;
+  type: string;
+  created_at: string;
+}
+
+export interface InternshipDynamicColumnValue {
+  id: string;
+  column_id: string;
+  internship_id: string;
+  value: string;
+  created_at: string;
+  internship_dynamic_columns?: InternshipDynamicColumn;
+}
+
 // Function to create the necessary tables in Supabase if they don't exist
 export async function setupDatabase() {
   try {
@@ -537,18 +553,18 @@ export async function addInternshipDynamicColumn(name: string, type: string) {
 }
 
 // Get all dynamic columns for internships
-export async function getInternshipDynamicColumns() {
+export async function getInternshipDynamicColumns(): Promise<InternshipDynamicColumn[]> {
   try {
     const { data, error } = await supabase
       .from('internship_dynamic_columns')
-      .select('*');
-    
+      .select('*')
+      .order('created_at', { ascending: true });
+
     if (error) {
-      console.error('Error fetching internship dynamic columns:', error);
-      return [];
+      throw error;
     }
-    
-    return data;
+
+    return data || [];
   } catch (error) {
     console.error('Error fetching internship dynamic columns:', error);
     return [];
@@ -556,19 +572,22 @@ export async function getInternshipDynamicColumns() {
 }
 
 // Add a dynamic column value for internships
-export async function addInternshipDynamicColumnValue(columnId: string, internshipId: string, value: any) {
+export async function addInternshipDynamicColumnValue(
+  columnId: string,
+  internshipId: string,
+  value: string
+): Promise<InternshipDynamicColumnValue | null> {
   try {
     const { data, error } = await supabase
       .from('internship_dynamic_column_values')
       .insert({ column_id: columnId, internship_id: internshipId, value })
       .select()
       .single();
-    
+
     if (error) {
-      console.error('Error adding internship dynamic column value:', error);
-      return null;
+      throw error;
     }
-    
+
     return data;
   } catch (error) {
     console.error('Error adding internship dynamic column value:', error);
@@ -577,19 +596,18 @@ export async function addInternshipDynamicColumnValue(columnId: string, internsh
 }
 
 // Get dynamic column values for an internship
-export async function getInternshipDynamicColumnValues(internshipId: string) {
+export async function getInternshipDynamicColumnValues(internshipId: string): Promise<InternshipDynamicColumnValue[]> {
   try {
     const { data, error } = await supabase
       .from('internship_dynamic_column_values')
-      .select('*, internship_dynamic_columns(*)')
+      .select('*, internship_dynamic_columns:column_id(*)')
       .eq('internship_id', internshipId);
-    
+
     if (error) {
-      console.error('Error fetching internship dynamic column values:', error);
-      return [];
+      throw error;
     }
-    
-    return data;
+
+    return data || [];
   } catch (error) {
     console.error('Error fetching internship dynamic column values:', error);
     return [];
@@ -700,31 +718,50 @@ export const deleteDynamicColumn = async (columnId: string) => {
 // Function to delete an internship dynamic column
 export const deleteInternshipDynamicColumn = async (columnId: string) => {
   try {
-    // Delete values first
-    const { error: valueError } = await supabase
+    // First, delete any values associated with this column
+    const { error: valuesError } = await supabase
       .from('internship_dynamic_column_values')
       .delete()
       .eq('column_id', columnId);
-    
-    if (valueError) {
-      console.error('Error deleting internship dynamic column values:', valueError);
-      throw valueError;
+
+    if (valuesError) {
+      throw valuesError;
     }
-    
-    // Then delete the column
+
+    // Then delete the column itself
     const { error } = await supabase
       .from('internship_dynamic_columns')
       .delete()
       .eq('id', columnId);
-    
+
     if (error) {
-      console.error('Error deleting internship dynamic column:', error);
       throw error;
     }
-    
+
     return true;
   } catch (error) {
-    console.error('Error in deleteInternshipDynamicColumn:', error);
-    throw error;
+    console.error('Error deleting internship dynamic column:', error);
+    return false;
+  }
+};
+
+export const updateInternshipDynamicColumnValue = async (
+  valueId: string,
+  value: string
+): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('internship_dynamic_column_values')
+      .update({ value })
+      .eq('id', valueId);
+
+    if (error) {
+      throw error;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error updating internship dynamic column value:', error);
+    return false;
   }
 };

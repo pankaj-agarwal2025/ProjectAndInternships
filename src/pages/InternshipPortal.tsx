@@ -1,18 +1,21 @@
+
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import Navbar from '@/components/Navbar';
 import InternshipTable from '@/components/InternshipTable';
 import InternshipFilters from '@/components/InternshipFilters';
+import ImportExcelInternshipModal from '@/components/ImportExcelInternshipModal';
 import { Faculty, setupDatabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
-import { PlusCircle, FileText } from 'lucide-react';
+import { PlusCircle, FileText, FilePlus2 } from 'lucide-react';
 
 const InternshipPortal = () => {
   const navigate = useNavigate();
   const [faculty, setFaculty] = useState<Faculty | null>(null);
   const [filters, setFilters] = useState<Record<string, any>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [showImportExcelModal, setShowImportExcelModal] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -93,7 +96,14 @@ const InternshipPortal = () => {
             </p>
           </div>
           
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Button 
+              className="bg-secondary hover:bg-secondary/80 flex items-center"
+              onClick={() => setShowImportExcelModal(true)}
+            >
+              <FilePlus2 className="mr-2 h-4 w-4" />
+              Upload Excel
+            </Button>
             <Button 
               className="bg-primary hover:bg-primary/90 flex items-center"
               onClick={() => {
@@ -117,6 +127,11 @@ const InternshipPortal = () => {
           <InternshipTable filters={filters} />
         </div>
       </div>
+      
+      <ImportExcelInternshipModal 
+        isOpen={showImportExcelModal} 
+        onClose={() => setShowImportExcelModal(false)}
+      />
     </div>
   );
 };
