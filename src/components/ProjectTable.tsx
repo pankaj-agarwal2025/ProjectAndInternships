@@ -107,7 +107,6 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
 
       if (projectsData) {
         setProjects(projectsData);
-        // Fetch dynamic column values for each project
         const values = {};
         for (const project of projectsData) {
           const dynamicValues = await getDynamicColumnValues(project.id);
@@ -173,14 +172,12 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
 
     setIsSaving(true);
     try {
-      // Ensure that editedProject is not undefined and has the necessary properties
       if (editedProject) {
         await supabase
           .from('projects')
           .update(editedProject)
           .eq('id', editProjectId);
 
-        // Update dynamic column values
         if (dynamicColumnValues[editProjectId]) {
           for (const dynamicValue of dynamicColumnValues[editProjectId]) {
             const inputId = `dynamic-input-${dynamicValue.column_id}`;
@@ -195,7 +192,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
           }
         }
 
-        fetchProjects(); // Refresh projects
+        fetchProjects();
         setEditProjectId(null);
         setEditedProject({});
         toast({
@@ -232,7 +229,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
       for (const projectId of selectedProjects) {
         await supabase.from('projects').delete().eq('id', projectId);
       }
-      fetchProjects(); // Refresh projects
+      fetchProjects();
       setSelectedProjects([]);
       toast({
         title: 'Success',
@@ -258,7 +255,6 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
   const generatePdf = () => {
     const doc = new jsPDF();
 
-    // Define the columns for the table
     const columns = [
       'Group No',
       'Title',
@@ -271,7 +267,6 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
       'Faculty Coordinator',
     ];
 
-    // Map the project data to the table rows
     const rows = projects.map((project) => [
       project.group_no,
       project.title,
@@ -284,18 +279,15 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
       project.faculty_coordinator,
     ]);
 
-    // Add the table to the PDF
     autoTable(doc, {
       head: [columns],
       body: rows,
     });
 
-    // Save or open the PDF
     doc.save('projects.pdf');
   };
 
   const generateExcel = () => {
-    // Convert project data to array of objects
     const data = projects.map((project) => ({
       'Group No': project.group_no,
       'Title': project.title,
@@ -308,13 +300,9 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
       'Faculty Coordinator': project.faculty_coordinator,
     }));
 
-    // Create a new workbook
     const wb = XLSX.utils.book_new();
-    // Convert the data to a worksheet
     const ws = XLSX.utils.json_to_sheet(data);
-    // Add the worksheet to the workbook
     XLSX.utils.book_append_sheet(wb, ws, 'Projects');
-    // Generate the Excel file
     XLSX.writeFile(wb, 'projects.xlsx');
   };
 
@@ -328,7 +316,6 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
 
       if (fetchedStudents && fetchedStudents.data) {
         setStudents(fetchedStudents.data);
-        // Initialize studentUpdates with current student data
         const initialUpdates = {};
         fetchedStudents.data.forEach(student => {
           initialUpdates[student.id] = {};
@@ -382,7 +369,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
         description: 'Student details updated successfully!',
       });
       handleCloseStudentModal();
-      fetchProjects(); // Refresh projects
+      fetchProjects();
     } catch (error) {
       console.error('Error updating student details:', error);
       toast({
@@ -417,18 +404,15 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
   };
 
   const handleDynamicValueChange = async (projectId: string, columnId: string, value: any) => {
-    // Find the existing value for this project and column
     const existingValue = dynamicColumnValues[projectId]?.find(item => item.dynamic_columns.id === columnId);
 
     if (existingValue) {
-      // Update the existing value
       try {
         await supabase
           .from('dynamic_column_values')
           .update({ value: value })
           .eq('id', existingValue.id);
 
-        // Update the local state
         setDynamicColumnValues(prevValues => {
           const updatedProjectValues = prevValues[projectId].map(item => {
             if (item.dynamic_columns.id === columnId) {
@@ -456,14 +440,11 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
         });
       }
     } else {
-      // Add a new value
       try {
         await addDynamicColumnValue(columnId, projectId, value);
 
-        // Fetch the updated dynamic column values for the project
         const updatedDynamicValues = await getDynamicColumnValues(projectId);
 
-        // Update the local state
         setDynamicColumnValues(prevValues => ({
           ...prevValues,
           [projectId]: updatedDynamicValues,
@@ -505,7 +486,6 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
     try {
       await deleteDynamicColumn(columnId);
       fetchDynamicColumns();
-      // Update dynamicColumnValues state to remove the deleted column
       setDynamicColumnValues(prevValues => {
         const updatedValues = {};
         for (const projectId in prevValues) {
@@ -607,7 +587,6 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
               <TableCell>{project.semester}</TableCell>
               <TableCell>{project.faculty_coordinator}</TableCell>
               {dynamicColumns.map((column) => {
-                // Find the dynamic value for this project and column
                 const dynamicValue = dynamicColumnValues[project.id]?.find(item => item.dynamic_columns.id === column.id);
                 const value = dynamicValue ? dynamicValue.value : '';
 

@@ -58,6 +58,7 @@ const ProjectFilters = ({ onFilterChange }: ProjectFiltersProps) => {
             <SelectValue placeholder="Select domain" />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="all">All Domains</SelectItem>
             <SelectItem value="Web Development">Web Development</SelectItem>
             <SelectItem value="Mobile App Development">Mobile App Development</SelectItem>
             <SelectItem value="Data Science">Data Science</SelectItem>
@@ -76,6 +77,7 @@ const ProjectFilters = ({ onFilterChange }: ProjectFiltersProps) => {
             <SelectValue placeholder="Select year" />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="all">All Years</SelectItem>
             <SelectItem value="2021">2021</SelectItem>
             <SelectItem value="2022">2022</SelectItem>
             <SelectItem value="2023">2023</SelectItem>
