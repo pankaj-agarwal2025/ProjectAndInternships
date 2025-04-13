@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Table, 
@@ -739,11 +740,13 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     try {
       const doc = new jsPDF('landscape');
       
+      // Add title and date
       doc.setFontSize(18);
       doc.text('Internship Data Report', 14, 20);
       doc.setFontSize(11);
       doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 26);
       
+      // Add filter information if any
       if (Object.keys(filters).length > 0) {
         doc.setFontSize(12);
         doc.text('Applied Filters:', 14, 34);
@@ -771,13 +774,21 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         });
       }
       
+      // Get table headers
       const headers = ['Roll No', 'Name', 'Organization', 'Position', 'Program', 'Starting Date', 'Ending Date', 'Duration'];
       
+      // Add dynamic column headers
       dynamicColumns.forEach(column => {
         headers.push(column.name);
       });
       
-      const rowDataPromises = internships.map(async (internship) => {
+      // Create promises to fetch data for each internship
+      const rowPromises = internships.map(async (internship) => {
+        // Convert React elements to strings for the PDF
+        const durationText = typeof getDurationText(internship) === 'string' 
+          ? getDurationText(internship) 
+          : 'Ongoing';
+          
         const row = [
           internship.roll_no || '',
           internship.name || '',
@@ -786,11 +797,10 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
           internship.program || '',
           internship.starting_date || '',
           internship.ending_date || '',
-          typeof getDurationText(internship) === 'string' 
-            ? getDurationText(internship) 
-            : 'Ongoing'
+          durationText
         ];
         
+        // Add dynamic column values
         for (const column of dynamicColumns) {
           try {
             const { data } = await supabase
@@ -809,18 +819,21 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         return row;
       });
       
-      const data = await Promise.all(rowDataPromises);
+      // Resolve all promises to get the data
+      const tableData = await Promise.all(rowPromises);
       
+      // Generate table with autoTable
       autoTable(doc, {
         startY: Object.keys(filters).length > 0 ? 50 : 35,
         head: [headers],
-        body: data,
+        body: tableData,
         theme: 'grid',
         styles: { fontSize: 8, cellPadding: 2 },
         headStyles: { fillColor: [41, 128, 185], textColor: 255 },
         alternateRowStyles: { fillColor: [245, 245, 245] }
       });
       
+      // Save the PDF
       doc.save('internship_report.pdf');
       
       toast({

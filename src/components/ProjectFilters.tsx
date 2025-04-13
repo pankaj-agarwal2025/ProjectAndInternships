@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { getProjects } from '@/lib/supabase';
+import { getProjects, getStudentsByGroupId } from '@/lib/supabase';
 import { Plus, Filter, X } from 'lucide-react';
 
 interface ProjectFiltersProps {
@@ -34,21 +34,35 @@ const ProjectFilters: React.FC<ProjectFiltersProps> = ({ onFilterChange }) => {
   useEffect(() => {
     // Fetch unique values for filters
     const fetchFilterOptions = async () => {
-      const projects = await getProjects();
-      
-      const uniqueSessions = [...new Set(projects.map(p => p.session))].filter(Boolean) as string[];
-      const uniqueYears = [...new Set(projects.map(p => p.year))].filter(Boolean) as string[];
-      const uniqueSemesters = [...new Set(projects.map(p => p.semester))].filter(Boolean) as string[];
-      const uniquePrograms = [...new Set(projects.flatMap(p => {
-        // Attempt to extract program from students
-        const students = p.students || [];
-        return students.map(s => s.program).filter(Boolean);
-      }))].filter(Boolean) as string[];
-      
-      setSessions(uniqueSessions);
-      setYears(uniqueYears);
-      setSemesters(uniqueSemesters);
-      setPrograms(uniquePrograms);
+      try {
+        const projects = await getProjects();
+        
+        const uniqueSessions = [...new Set(projects.map(p => p.session))].filter(Boolean) as string[];
+        const uniqueYears = [...new Set(projects.map(p => p.year))].filter(Boolean) as string[];
+        const uniqueSemesters = [...new Set(projects.map(p => p.semester))].filter(Boolean) as string[];
+        
+        // For programs, we need to fetch students data
+        const programSet = new Set<string>();
+        
+        // Process each project to collect unique program values
+        for (const project of projects) {
+          const students = await getStudentsByGroupId(project.id);
+          students.forEach(student => {
+            if (student.program) {
+              programSet.add(student.program);
+            }
+          });
+        }
+        
+        const uniquePrograms = Array.from(programSet);
+        
+        setSessions(uniqueSessions);
+        setYears(uniqueYears);
+        setSemesters(uniqueSemesters);
+        setPrograms(uniquePrograms);
+      } catch (error) {
+        console.error("Error fetching filter options:", error);
+      }
     };
     
     fetchFilterOptions();
