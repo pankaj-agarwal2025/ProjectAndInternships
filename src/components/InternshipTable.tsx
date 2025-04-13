@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Table, 
@@ -781,46 +780,66 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       dynamicColumns.forEach(column => {
         headers.push(column.name);
       });
-      
-      // Create promises to fetch data for each internship
-      const rowPromises = internships.map(async (internship) => {
-        // Convert React elements to strings for the PDF
-        const durationText = typeof getDurationText(internship) === 'string' 
-          ? getDurationText(internship) 
-          : 'Ongoing';
-          
-        const row = [
-          internship.roll_no || '',
-          internship.name || '',
-          internship.organization_name || '',
-          internship.position || '',
-          internship.program || '',
-          internship.starting_date || '',
-          internship.ending_date || '',
-          durationText
-        ];
-        
-        // Add dynamic column values
-        for (const column of dynamicColumns) {
-          try {
-            const { data } = await supabase
-              .from('internship_dynamic_column_values')
-              .select('value')
-              .eq('internship_id', internship.id)
-              .eq('column_id', column.id)
-              .single();
-            
-            row.push(data?.value || '');
-          } catch (error) {
-            row.push('');
-          }
+
+      // Helper function to convert React elements to strings for PDF
+      const getDurationString = (internship: Internship) => {
+        if (!internship.starting_date || !internship.ending_date) {
+          return 'Ongoing';
         }
         
-        return row;
-      });
+        try {
+          const startDate = new Date(formatDateForDB(internship.starting_date) || '');
+          const endDate = new Date(formatDateForDB(internship.ending_date) || '');
+          
+          const monthsDiff = differenceInMonths(endDate, startDate);
+          const remainingDays = differenceInDays(endDate, startDate) % 30;
+          
+          return `${monthsDiff} month${monthsDiff !== 1 ? 's' : ''}, ${remainingDays} day${remainingDays !== 1 ? 's' : ''}`;
+        } catch (error) {
+          console.error("Error calculating duration:", error);
+          return internship.internship_duration ? `${internship.internship_duration} months` : '-';
+        }
+      };
       
-      // Resolve all promises to get the data
-      const tableData = await Promise.all(rowPromises);
+      // Create table data
+      const getTableData = async () => {
+        const rows = [];
+        
+        for (const internship of internships) {
+          const row = [
+            internship.roll_no || '',
+            internship.name || '',
+            internship.organization_name || '',
+            internship.position || '',
+            internship.program || '',
+            internship.starting_date || '',
+            internship.ending_date || '',
+            getDurationString(internship)
+          ];
+          
+          // Add dynamic column values
+          for (const column of dynamicColumns) {
+            try {
+              const { data } = await supabase
+                .from('internship_dynamic_column_values')
+                .select('value')
+                .eq('internship_id', internship.id)
+                .eq('column_id', column.id)
+                .single();
+              
+              row.push(data?.value || '');
+            } catch (error) {
+              row.push('');
+            }
+          }
+          
+          rows.push(row);
+        }
+        
+        return rows;
+      };
+      
+      const tableData = await getTableData();
       
       // Generate table with autoTable
       autoTable(doc, {
