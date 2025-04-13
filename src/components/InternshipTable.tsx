@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Table, 
@@ -34,6 +33,13 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { getInternshipDynamicColumns, deleteInternshipDynamicColumn } from '@/lib/supabase';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select';
 
 interface InternshipTableProps {
   filters: Record<string, any>;
@@ -68,7 +74,6 @@ interface DynamicColumn {
   type: string;
 }
 
-// Component to display dynamic column values
 const DynamicColumnValue = ({ internshipId, columnId }: { internshipId: string, columnId: string }) => {
   const [value, setValue] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
@@ -123,19 +128,15 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
   const [deleteColumnId, setDeleteColumnId] = useState<string | null>(null);
   const { toast } = useToast();
   
-  // Program options
   const programOptions = [
     'BSc (CS)', 'BSc (DS)', 'BSc (Cyber)', 'BCA', 'BCA AI/DS', 
     'BTech CSE', 'BTech FSD', 'BTech UI/UX', 'BTech AI/ML'
   ];
   
-  // Faculty coordinator options
   const facultyCoordinators = ['Dr. Pankaj', 'Dr. Anshu', 'Dr. Meenu', 'Dr. Swati'];
   
-  // Calculate total pages
   const totalPages = Math.ceil(internships.length / itemsPerPage);
   
-  // Get current items for pagination
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const currentInternships = internships.slice(indexOfFirstItem, indexOfLastItem);
@@ -150,7 +151,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     try {
       let query = supabase.from('internships').select('*');
       
-      // Apply filters if they exist
       if (filters && Object.keys(filters).length > 0) {
         Object.entries(filters).forEach(([key, value]) => {
           if (value && key !== 'starting_month' && key !== 'searchTerm' && !key.startsWith('dynamic_')) {
@@ -158,12 +158,10 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
           }
         });
         
-        // Special handling for starting_month filter
         if (filters.starting_month) {
           query = query.ilike('starting_date', `%-${filters.starting_month}-%`);
         }
         
-        // Special handling for search term
         if (filters.searchTerm) {
           const searchTerm = filters.searchTerm.toLowerCase();
           query = query.or(`roll_no.ilike.%${searchTerm}%,name.ilike.%${searchTerm}%,organization_name.ilike.%${searchTerm}%`);
@@ -178,7 +176,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       }
       
       if (data) {
-        // Format dates for display (dd-mm-yyyy)
         const formattedData = data.map(internship => ({
           ...internship,
           starting_date: internship.starting_date ? formatDateForDisplay(internship.starting_date) : '',
@@ -248,13 +245,11 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
   const handleSaveAll = async () => {
     try {
       for (const [id, fields] of Object.entries(editedCells)) {
-        // Prepare data for update
         const updateData: Record<string, any> = {
           ...fields,
           updated_at: new Date().toISOString()
         };
         
-        // Format dates for database
         if (updateData.starting_date) {
           updateData.starting_date = formatDateForDB(updateData.starting_date);
         }
@@ -262,7 +257,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
           updateData.ending_date = formatDateForDB(updateData.ending_date);
         }
         
-        // Calculate internship duration in months if both dates are provided
         if (updateData.starting_date && updateData.ending_date) {
           const startDate = new Date(updateData.starting_date);
           const endDate = new Date(updateData.ending_date);
@@ -271,7 +265,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
           updateData.internship_duration = monthsDiff;
         }
         
-        // Update internship in database
         const { error } = await supabase
           .from('internships')
           .update(updateData)
@@ -288,7 +281,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         }
       }
       
-      // Refresh data
       fetchInternships();
       
       toast({
@@ -296,7 +288,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         description: 'All changes saved successfully',
       });
       
-      // Clear edited cells
       setEditedCells({});
     } catch (error) {
       console.error('Error saving changes:', error);
@@ -312,13 +303,11 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     if (!editedCells[id]) return;
     
     try {
-      // Prepare data for update
       const updateData: Record<string, any> = {
         ...editedCells[id],
         updated_at: new Date().toISOString()
       };
       
-      // Format dates for database
       if (updateData.starting_date) {
         updateData.starting_date = formatDateForDB(updateData.starting_date);
       }
@@ -326,7 +315,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         updateData.ending_date = formatDateForDB(updateData.ending_date);
       }
       
-      // Calculate internship duration if both dates are provided
       if (updateData.starting_date && updateData.ending_date) {
         const startDate = new Date(updateData.starting_date);
         const endDate = new Date(updateData.ending_date);
@@ -335,7 +323,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         updateData.internship_duration = monthsDiff;
       }
       
-      // Update internship in database
       const { error } = await supabase
         .from('internships')
         .update(updateData)
@@ -351,7 +338,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         return;
       }
       
-      // Refresh data
       await fetchInternships();
       
       toast({
@@ -359,12 +345,10 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         description: 'Changes saved successfully',
       });
       
-      // Remove this internship from edited cells
       const newEditedCells = { ...editedCells };
       delete newEditedCells[id];
       setEditedCells(newEditedCells);
       
-      // Clear editing state if this row was being edited
       if (editableCell?.id === id) {
         setEditableCell(null);
         setNewValue('');
@@ -385,13 +369,11 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     try {
       const { id, field } = editableCell;
       
-      // Update local edited cells state
       setEditedCells(prev => ({
         ...prev,
         [id]: { ...prev[id], [field]: newValue }
       }));
       
-      // Update local state immediately for better UX
       setInternships(internships.map(internship => 
         internship.id === id 
           ? { ...internship, [field]: newValue } 
@@ -421,18 +403,15 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
   };
   
   const handleCancelRowEdits = (id: string) => {
-    // Remove this internship from edited cells
     const newEditedCells = { ...editedCells };
     delete newEditedCells[id];
     setEditedCells(newEditedCells);
     
-    // Clear editing state if this row was being edited
     if (editableCell?.id === id) {
       setEditableCell(null);
       setNewValue('');
     }
     
-    // Refresh to revert changes
     fetchInternships();
   };
   
@@ -450,7 +429,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         throw error;
       }
       
-      // Update local state
       setInternships(internships.filter(internship => internship.id !== deleteId));
       
       toast({
@@ -532,7 +510,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     try {
       await deleteInternshipDynamicColumn(deleteColumnId);
       
-      // Update local state
       setDynamicColumns(dynamicColumns.filter(col => col.id !== deleteColumnId));
       
       toast({
@@ -554,7 +531,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
   
   const handleDynamicColumnValueChange = async (internshipId: string, columnId: string, value: string) => {
     try {
-      // Check if a value already exists
       const { data: existingValue, error: fetchError } = await supabase
         .from('internship_dynamic_column_values')
         .select('*')
@@ -562,13 +538,12 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         .eq('column_id', columnId)
         .single();
       
-      if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 means no rows returned
+      if (fetchError && fetchError.code !== 'PGRST116') {
         console.error('Error fetching dynamic column value:', fetchError);
         throw fetchError;
       }
       
       if (existingValue) {
-        // Update existing value
         const { error } = await supabase
           .from('internship_dynamic_column_values')
           .update({ value })
@@ -579,7 +554,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
           throw error;
         }
       } else {
-        // Insert new value
         const { error } = await supabase
           .from('internship_dynamic_column_values')
           .insert({
@@ -615,7 +589,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     const file = e.target.files[0];
     
     try {
-      // Upload file to Supabase storage
       const fileName = `${field}_${id}_${new Date().getTime()}`;
       const { data, error } = await supabase.storage
         .from('documents')
@@ -630,18 +603,15 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       }
       
       if (data) {
-        // Get public URL
         const { data: publicURLData } = supabase.storage
           .from('documents')
           .getPublicUrl(data.path);
         
-        // Update edited cells state with file URL
         setEditedCells(prev => ({
           ...prev,
           [id]: { ...prev[id], [field]: publicURLData.publicUrl }
         }));
         
-        // Update local state
         setInternships(internships.map(internship => 
           internship.id === id 
             ? { ...internship, [field]: publicURLData.publicUrl } 
@@ -695,7 +665,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       }
       
       if (data && data.length > 0) {
-        // Format dates for display
         const newInternship = {
           ...data[0],
           starting_date: data[0].starting_date ? formatDateForDisplay(data[0].starting_date) : '',
@@ -721,17 +690,14 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
   
   const exportToExcel = () => {
     try {
-      // Create worksheet
       const worksheet = XLSX.utils.json_to_sheet(
         internships.map(internship => {
           const exportData: Record<string, any> = { ...internship };
           
-          // Remove unnecessary fields
           delete exportData.id;
           delete exportData.created_at;
           delete exportData.updated_at;
           
-          // Change starting_date and ending_date format
           if (exportData.starting_date) {
             const [day, month, year] = exportData.starting_date.split('-');
             exportData.starting_date = `${year}-${month}-${day}`;
@@ -742,7 +708,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
             exportData.ending_date = `${year}-${month}-${day}`;
           }
           
-          // If no ending date, show "Ongoing" for duration
           if (!exportData.ending_date) {
             exportData.internship_duration = 'Ongoing';
           }
@@ -751,11 +716,9 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         })
       );
       
-      // Create workbook
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Internships');
       
-      // Export to file
       XLSX.writeFile(workbook, 'internships_data.xlsx');
       
       toast({
@@ -772,17 +735,15 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     }
   };
   
-  const exportToPDF = () => {
+  const exportToPDF = async () => {
     try {
       const doc = new jsPDF('landscape');
       
-      // Add title and date
       doc.setFontSize(18);
       doc.text('Internship Data Report', 14, 20);
       doc.setFontSize(11);
       doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 26);
       
-      // Add filter information if any
       if (Object.keys(filters).length > 0) {
         doc.setFontSize(12);
         doc.text('Applied Filters:', 14, 34);
@@ -810,16 +771,13 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         });
       }
       
-      // Get table headers
       const headers = ['Roll No', 'Name', 'Organization', 'Position', 'Program', 'Starting Date', 'Ending Date', 'Duration'];
       
-      // Add dynamic column headers
       dynamicColumns.forEach(column => {
         headers.push(column.name);
       });
       
-      // Create table data
-      const data = await Promise.all(internships.map(async (internship) => {
+      const rowDataPromises = internships.map(async (internship) => {
         const row = [
           internship.roll_no || '',
           internship.name || '',
@@ -828,10 +786,11 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
           internship.program || '',
           internship.starting_date || '',
           internship.ending_date || '',
-          getDurationText(internship) || ''
+          typeof getDurationText(internship) === 'string' 
+            ? getDurationText(internship) 
+            : 'Ongoing'
         ];
         
-        // Add dynamic column values
         for (const column of dynamicColumns) {
           try {
             const { data } = await supabase
@@ -848,9 +807,10 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         }
         
         return row;
-      }));
+      });
       
-      // Generate table with autoTable
+      const data = await Promise.all(rowDataPromises);
+      
       autoTable(doc, {
         startY: Object.keys(filters).length > 0 ? 50 : 35,
         head: [headers],
@@ -861,7 +821,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         alternateRowStyles: { fillColor: [245, 245, 245] }
       });
       
-      // Save the PDF
       doc.save('internship_report.pdf');
       
       toast({
@@ -878,7 +837,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     }
   };
   
-  // Calculate internship duration and get formatted string
   const getDurationText = (internship: Internship) => {
     if (!internship.starting_date || !internship.ending_date) {
       return <span className="text-blue-500 font-medium">Ongoing</span>;
@@ -898,7 +856,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     }
   };
   
-  // Page navigation
   const nextPage = () => {
     if (currentPage < totalPages) {
       setCurrentPage(currentPage + 1);
@@ -921,7 +878,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     const valueToShow = hasChanges ? editedCells[internship.id][field] : internship[field];
     
     if (isEditing) {
-      // Different input types based on the field
       if (field === 'faculty_coordinator') {
         return (
           <div className="flex items-center border border-blue-300 bg-blue-50 rounded p-1">
@@ -1015,7 +971,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         );
       }
     } else {
-      // Handle file/URL fields
       if (field === 'offer_letter_url' || field === 'noc_url' || field === 'ppo_url') {
         return (
           <div className="flex flex-col space-y-2">
@@ -1065,12 +1020,10 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         );
       }
       
-      // Handle duration field
       if (field === 'internship_duration') {
         return getDurationText(internship);
       }
       
-      // Handle other fields
       return (
         <div className="flex items-center justify-between group">
           <span className={hasChanges ? 'font-medium text-blue-600' : ''}>
@@ -1175,7 +1128,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
                 <TableHead>Offer Letter</TableHead>
                 <TableHead>NOC</TableHead>
                 <TableHead>PPO</TableHead>
-                {/* Dynamic columns */}
                 {dynamicColumns.map((column) => (
                   <TableHead key={column.id} className="relative">
                     <div className="flex items-center justify-between pr-8">
@@ -1256,7 +1208,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
                     <TableCell>{renderCell(internship, 'noc_url', 'NOC')}</TableCell>
                     <TableCell>{renderCell(internship, 'ppo_url', 'PPO')}</TableCell>
                     
-                    {/* Dynamic columns */}
                     {dynamicColumns.map((column) => (
                       <TableCell key={column.id}>
                         <div className="flex items-center justify-between group">
@@ -1290,7 +1241,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         </div>
       )}
       
-      {/* Pagination */}
       {internships.length > 0 && (
         <div className="flex items-center justify-between p-4 border-t">
           <div>
@@ -1309,7 +1259,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
             </Button>
             
             {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-              // Calculate page numbers to show around current page
               let pageNum;
               if (totalPages <= 5) {
                 pageNum = i + 1;
@@ -1346,7 +1295,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         </div>
       )}
       
-      {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1367,7 +1315,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         </AlertDialogContent>
       </AlertDialog>
       
-      {/* Delete Column Confirmation Dialog */}
       <AlertDialog open={deleteColumnConfirmOpen} onOpenChange={setDeleteColumnConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1388,7 +1335,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         </AlertDialogContent>
       </AlertDialog>
       
-      {/* Add Column Dialog */}
       <Dialog open={showAddColumn} onOpenChange={setShowAddColumn}>
         <DialogContent>
           <DialogHeader>
