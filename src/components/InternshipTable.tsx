@@ -24,7 +24,8 @@ import {
   FileUp,
   X,
   Edit,
-  Plus
+  Plus,
+  FilePdf
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import * as XLSX from 'xlsx';
@@ -77,6 +78,9 @@ interface DynamicColumn {
 const DynamicColumnValue = ({ internshipId, columnId }: { internshipId: string, columnId: string }) => {
   const [value, setValue] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState('');
+  const { toast } = useToast();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -96,6 +100,7 @@ const DynamicColumnValue = ({ internshipId, columnId }: { internshipId: string, 
         }
         
         setValue(data?.value || '');
+        setEditValue(data?.value || '');
       } catch (err) {
         console.error('Error in DynamicColumnValue:', err);
         setIsLoading(false);
@@ -105,8 +110,95 @@ const DynamicColumnValue = ({ internshipId, columnId }: { internshipId: string, 
     fetchData();
   }, [internshipId, columnId]);
 
+  const handleSave = async () => {
+    try {
+      const { data: existingValue, error: fetchError } = await supabase
+        .from('internship_dynamic_column_values')
+        .select('*')
+        .eq('internship_id', internshipId)
+        .eq('column_id', columnId)
+        .single();
+      
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        console.error('Error fetching dynamic column value:', fetchError);
+        throw fetchError;
+      }
+      
+      if (existingValue) {
+        const { error } = await supabase
+          .from('internship_dynamic_column_values')
+          .update({ value: editValue })
+          .eq('id', existingValue.id);
+        
+        if (error) {
+          console.error('Error updating dynamic column value:', error);
+          throw error;
+        }
+      } else {
+        const { error } = await supabase
+          .from('internship_dynamic_column_values')
+          .insert({
+            internship_id: internshipId,
+            column_id: columnId,
+            value: editValue,
+          });
+        
+        if (error) {
+          console.error('Error inserting dynamic column value:', error);
+          throw error;
+        }
+      }
+      
+      setValue(editValue);
+      setIsEditing(false);
+      toast({
+        title: 'Success',
+        description: 'Value updated successfully',
+      });
+    } catch (error) {
+      console.error('Error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update value',
+        variant: 'destructive',
+      });
+    }
+  };
+
   if (isLoading) return <span className="text-gray-400">Loading...</span>;
-  return <span>{value || '-'}</span>;
+  
+  if (isEditing) {
+    return (
+      <div className="flex items-center space-x-1">
+        <Input 
+          value={editValue} 
+          onChange={(e) => setEditValue(e.target.value)} 
+          className="h-8 text-sm"
+          autoFocus
+        />
+        <Button size="sm" variant="ghost" onClick={handleSave} className="h-8 w-8 p-0">
+          <Save className="h-4 w-4" />
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setIsEditing(false)} className="h-8 w-8 p-0">
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between group">
+      <span data-dynamic-value={`${internshipId}-${columnId}`}>{value || '-'}</span>
+      <Button
+        size="sm"
+        variant="ghost"
+        className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100"
+        onClick={() => setIsEditing(true)}
+      >
+        <Edit className="h-3 w-3" />
+      </Button>
+    </div>
+  );
 };
 
 const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
@@ -688,34 +780,51 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     }
   };
   
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
     try {
-      const worksheet = XLSX.utils.json_to_sheet(
-        internships.map(internship => {
-          const exportData: Record<string, any> = { ...internship };
-          
-          delete exportData.id;
-          delete exportData.created_at;
-          delete exportData.updated_at;
-          
-          if (exportData.starting_date) {
-            const [day, month, year] = exportData.starting_date.split('-');
-            exportData.starting_date = `${year}-${month}-${day}`;
-          }
-          
-          if (exportData.ending_date) {
-            const [day, month, year] = exportData.ending_date.split('-');
-            exportData.ending_date = `${year}-${month}-${day}`;
-          }
-          
-          if (!exportData.ending_date) {
-            exportData.internship_duration = 'Ongoing';
-          }
-          
-          return exportData;
-        })
-      );
+      // Prepare data with dynamic column values
+      const exportData = [];
       
+      for (const internship of internships) {
+        const rowData: Record<string, any> = { ...internship };
+        
+        // Remove internal fields
+        delete rowData.id;
+        delete rowData.created_at;
+        delete rowData.updated_at;
+        
+        // Format dates consistently
+        if (rowData.starting_date) {
+          const [day, month, year] = rowData.starting_date.split('-').map(part => parseInt(part, 10));
+          rowData.starting_date = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+        }
+        
+        if (rowData.ending_date) {
+          const [day, month, year] = rowData.ending_date.split('-').map(part => parseInt(part, 10));
+          rowData.ending_date = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+        }
+        
+        // Add dynamic column values
+        for (const column of dynamicColumns) {
+          try {
+            const { data } = await supabase
+              .from('internship_dynamic_column_values')
+              .select('value')
+              .eq('internship_id', internship.id)
+              .eq('column_id', column.id)
+              .single();
+            
+            rowData[column.name] = data?.value || '';
+          } catch (error) {
+            rowData[column.name] = '';
+          }
+        }
+        
+        exportData.push(rowData);
+      }
+      
+      // Create and export the workbook
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Internships');
       
@@ -1161,7 +1270,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
                 <TableHead>NOC</TableHead>
                 <TableHead>PPO</TableHead>
                 {dynamicColumns.map((column) => (
-                  <TableHead key={column.id} className="relative">
+                  <TableHead key={column.id} className="relative group">
                     <div className="flex items-center justify-between pr-8">
                       <span>{column.name}</span>
                       <Button
@@ -1169,7 +1278,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
                         className="h-6 w-6 p-0 absolute right-2 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100"
                         onClick={() => handleDeleteColumn(column.id)}
                       >
-                        <X className="h-4 w-4 text-red-500" />
+                        <Trash2 className="h-4 w-4 text-red-500" />
                       </Button>
                     </div>
                   </TableHead>
@@ -1242,23 +1351,10 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
                     
                     {dynamicColumns.map((column) => (
                       <TableCell key={column.id}>
-                        <div className="flex items-center justify-between group">
-                          <DynamicColumnValue 
-                            internshipId={internship.id} 
-                            columnId={column.id} 
-                          />
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100"
-                            onClick={() => {
-                              const value = document.querySelector(`[data-dynamic-value="${internship.id}-${column.id}"]`)?.textContent || '';
-                              handleDynamicColumnValueChange(internship.id, column.id, value);
-                            }}
-                          >
-                            <Edit className="h-3 w-3" />
-                          </Button>
-                        </div>
+                        <DynamicColumnValue 
+                          internshipId={internship.id} 
+                          columnId={column.id} 
+                        />
                       </TableCell>
                     ))}
                   </TableRow>
@@ -1405,8 +1501,15 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
                   <SelectItem value="number">Number</SelectItem>
                   <SelectItem value="date">Date</SelectItem>
                   <SelectItem value="boolean">Yes/No</SelectItem>
+                  <SelectItem value="pdf">PDF Document</SelectItem>
                 </SelectContent>
               </Select>
+              {newColumnType === 'pdf' && (
+                <p className="text-xs text-gray-500 mt-1">
+                  <FilePdf className="inline-block h-3 w-3 mr-1" />
+                  PDF columns allow users to upload and view PDF documents.
+                </p>
+              )}
             </div>
           </div>
           
