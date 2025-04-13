@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Filter, Calendar, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -180,7 +181,7 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
                     <SelectValue placeholder="Select program" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Programs</SelectItem>
+                    <SelectItem value="all_programs">All Programs</SelectItem>
                     {programOptions.map(option => (
                       <SelectItem key={option} value={option}>{option}</SelectItem>
                     ))}
@@ -208,7 +209,7 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
                     <SelectValue placeholder="Select faculty coordinator" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Coordinators</SelectItem>
+                    <SelectItem value="all_coordinators">All Coordinators</SelectItem>
                     {facultyCoordinatorOptions.map(option => (
                       <SelectItem key={option} value={option}>{option}</SelectItem>
                     ))}
@@ -270,7 +271,7 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
                     <SelectValue placeholder="Select month" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Months</SelectItem>
+                    <SelectItem value="all_months">All Months</SelectItem>
                     {monthOptions.map((month) => (
                       <SelectItem key={month.value} value={month.value}>
                         {month.label}
@@ -327,7 +328,7 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
                 <SelectValue placeholder="Faculty Coordinator" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Coordinators</SelectItem>
+                <SelectItem value="all_coordinators">All Coordinators</SelectItem>
                 {facultyCoordinatorOptions.map(option => (
                   <SelectItem key={option} value={option}>{option}</SelectItem>
                 ))}
@@ -346,7 +347,7 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
                 <SelectValue placeholder="Starting Month" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Months</SelectItem>
+                <SelectItem value="all_months">All Months</SelectItem>
                 {monthOptions.map((month) => (
                   <SelectItem key={month.value} value={month.value}>
                     {month.label}
