@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -26,6 +27,7 @@ import {
   X,
   Link,
   File,
+  FilePdf,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import {
@@ -55,24 +57,30 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { addDynamicColumn, getDynamicColumns, addDynamicColumnValue, getDynamicColumnValues, deleteDynamicColumn } from '@/lib/supabase';
+import { 
+  getInternshipDynamicColumns, 
+  getInternshipDynamicColumnValues, 
+  deleteInternshipDynamicColumn,
+  updateInternshipDynamicColumnValue
+} from '@/lib/supabase';
+import InternshipColumnModal from './InternshipColumnModal';
+import InternshipDynamicField from './InternshipDynamicField';
+import { InternshipDynamicColumn, InternshipDynamicColumnValue } from '@/lib/supabase';
 
 interface InternshipTableProps {
   filters: Record<string, any>;
 }
 
 const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
-  const [internships, setInternships] = useState([]);
+  const [internships, setInternships] = useState<any[]>([]);
   const [selectedInternships, setSelectedInternships] = useState<string[]>([]);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
   const [editInternshipId, setEditInternshipId] = useState<string | null>(null);
   const [editedInternship, setEditedInternship] = useState<any>({});
   const [isSaving, setIsSaving] = useState(false);
-  const [dynamicColumns, setDynamicColumns] = useState([]);
+  const [dynamicColumns, setDynamicColumns] = useState<InternshipDynamicColumn[]>([]);
   const [showAddColumnModal, setShowAddColumnModal] = useState(false);
-  const [newColumnName, setNewColumnName] = useState('');
-  const [newColumnType, setNewColumnType] = useState('text');
-  const [dynamicColumnValues, setDynamicColumnValues] = useState({});
+  const [dynamicColumnValues, setDynamicColumnValues] = useState<Record<string, InternshipDynamicColumnValue[]>>({});
   const [isColumnDeleteAlertOpen, setIsColumnDeleteAlertOpen] = useState(false);
   const [columnToDelete, setColumnToDelete] = useState<string | null>(null);
   const { toast } = useToast();
@@ -115,12 +123,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
 
       if (data) {
         setInternships(data);
-        const values = {};
-        for (const internship of data) {
-          const dynamicValues = await getDynamicColumnValues(internship.id);
-          values[internship.id] = dynamicValues;
-        }
-        setDynamicColumnValues(values);
+        await fetchDynamicColumnValues(data);
       }
     } catch (error) {
       console.error('Error fetching internships:', error);
@@ -134,13 +137,41 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
 
   const fetchDynamicColumns = async () => {
     try {
-      const columns = await getDynamicColumns();
+      const columns = await getInternshipDynamicColumns();
       setDynamicColumns(columns);
     } catch (error) {
       console.error('Error fetching dynamic columns:', error);
       toast({
         title: 'Error',
         description: 'Failed to fetch dynamic columns. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const fetchDynamicColumnValues = async (internshipsData: any[]) => {
+    try {
+      const values: Record<string, InternshipDynamicColumnValue[]> = {};
+      
+      for (const internship of internshipsData) {
+        const { data, error } = await supabase
+          .from('internship_dynamic_column_values')
+          .select('*, internship_dynamic_columns:column_id(*)')
+          .eq('internship_id', internship.id);
+          
+        if (error) {
+          throw error;
+        }
+        
+        values[internship.id] = data || [];
+      }
+      
+      setDynamicColumnValues(values);
+    } catch (error) {
+      console.error('Error fetching dynamic column values:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch dynamic column values.',
         variant: 'destructive',
       });
     }
@@ -163,14 +194,14 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    setEditedInternship((prev) => ({ ...prev, [name]: value }));
+    setEditedInternship((prev: any) => ({ ...prev, [name]: value }));
   };
 
-  const handleDateChange = (date: Date | undefined) => {
+  const handleDateChange = (field: string, date: Date | undefined) => {
     if (date) {
-      setEditedInternship((prev) => ({
+      setEditedInternship((prev: any) => ({
         ...prev,
-        starting_date: format(date, 'yyyy-MM-dd'),
+        [field]: format(date, 'yyyy-MM-dd'),
       }));
     }
   };
@@ -180,41 +211,20 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
 
     setIsSaving(true);
     try {
-      if (editedInternship) {
-        await supabase
-          .from('internships')
-          .update(editedInternship)
-          .eq('id', editInternshipId);
+      const { error } = await supabase
+        .from('internships')
+        .update(editedInternship)
+        .eq('id', editInternshipId);
 
-        if (dynamicColumnValues[editInternshipId]) {
-          for (const dynamicValue of dynamicColumnValues[editInternshipId]) {
-            const inputId = `dynamic-input-${dynamicValue.column_id}`;
-            const inputElement = document.getElementById(inputId) as HTMLInputElement;
-            if (inputElement) {
-              const newValue = inputElement.value;
-              await supabase
-                .from('dynamic_column_values')
-                .update({ value: newValue })
-                .eq('id', dynamicValue.id);
-            }
-          }
-        }
+      if (error) throw error;
 
-        fetchInternships();
-        setEditInternshipId(null);
-        setEditedInternship({});
-        toast({
-          title: 'Success',
-          description: 'Internship updated successfully!',
-        });
-      } else {
-        console.error('Edited internship is undefined.');
-        toast({
-          title: 'Error',
-          description: 'Failed to update internship. Edited internship is undefined.',
-          variant: 'destructive',
-        });
-      }
+      fetchInternships();
+      setEditInternshipId(null);
+      setEditedInternship({});
+      toast({
+        title: 'Success',
+        description: 'Internship updated successfully!',
+      });
     } catch (error) {
       console.error('Error updating internship:', error);
       toast({
@@ -235,8 +245,23 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     setIsSaving(true);
     try {
       for (const internshipId of selectedInternships) {
-        await supabase.from('internships').delete().eq('id', internshipId);
+        // First, delete dynamic column values associated with the internship
+        const { error: valuesError } = await supabase
+          .from('internship_dynamic_column_values')
+          .delete()
+          .eq('internship_id', internshipId);
+        
+        if (valuesError) throw valuesError;
+        
+        // Then delete the internship
+        const { error } = await supabase
+          .from('internships')
+          .delete()
+          .eq('id', internshipId);
+          
+        if (error) throw error;
       }
+      
       fetchInternships();
       setSelectedInternships([]);
       toast({
@@ -260,10 +285,161 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     setIsDeleteAlertOpen(false);
   };
 
+  const handleUpdateDynamicValue = async (valueId: string, newValue: string) => {
+    try {
+      const result = await updateInternshipDynamicColumnValue(valueId, newValue);
+      if (!result) {
+        throw new Error('Failed to update dynamic column value');
+      }
+      
+      // Update local state to reflect the change
+      const updatedValues = { ...dynamicColumnValues };
+      
+      for (const internshipId in updatedValues) {
+        updatedValues[internshipId] = updatedValues[internshipId].map(value => {
+          if (value.id === valueId) {
+            return { ...value, value: newValue };
+          }
+          return value;
+        });
+      }
+      
+      setDynamicColumnValues(updatedValues);
+      
+      return;
+    } catch (error) {
+      console.error('Error updating dynamic value:', error);
+      throw error;
+    }
+  };
+
+  const handleAddDynamicValue = async (internshipId: string, columnId: string, value: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('internship_dynamic_column_values')
+        .insert({ 
+          internship_id: internshipId, 
+          column_id: columnId, 
+          value 
+        })
+        .select('*, internship_dynamic_columns:column_id(*)');
+        
+      if (error) throw error;
+      
+      // Update local state
+      setDynamicColumnValues(prev => ({
+        ...prev,
+        [internshipId]: [...(prev[internshipId] || []), data[0]]
+      }));
+      
+      return;
+    } catch (error) {
+      console.error('Error adding dynamic value:', error);
+      throw error;
+    }
+  };
+
+  const handleDynamicValueChange = async (internshipId: string, columnId: string, newValue: string) => {
+    try {
+      // Check if a value already exists for this internship and column
+      const existingValue = dynamicColumnValues[internshipId]?.find(
+        v => v.column_id === columnId
+      );
+      
+      if (existingValue) {
+        // Update existing value
+        await handleUpdateDynamicValue(existingValue.id, newValue);
+      } else {
+        // Add new value
+        await handleAddDynamicValue(internshipId, columnId, newValue);
+      }
+      
+      toast({
+        title: 'Success',
+        description: 'Column value updated successfully.',
+      });
+    } catch (error) {
+      console.error('Error managing dynamic value:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update column value.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const confirmDeleteColumn = async () => {
+    if (columnToDelete) {
+      try {
+        const result = await deleteInternshipDynamicColumn(columnToDelete);
+        
+        if (result) {
+          fetchDynamicColumns();
+          
+          // Update local state to remove all references to this column
+          const updatedValues = { ...dynamicColumnValues };
+          for (const internshipId in updatedValues) {
+            updatedValues[internshipId] = updatedValues[internshipId].filter(
+              value => value.column_id !== columnToDelete
+            );
+          }
+          
+          setDynamicColumnValues(updatedValues);
+          
+          toast({
+            title: 'Success',
+            description: 'Column deleted successfully.',
+          });
+        } else {
+          throw new Error('Failed to delete column');
+        }
+      } catch (error) {
+        console.error('Error deleting column:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to delete column. Please try again.',
+          variant: 'destructive',
+        });
+      }
+    }
+    
+    setIsColumnDeleteAlertOpen(false);
+    setColumnToDelete(null);
+  };
+
+  const handleDeleteColumn = (columnId: string) => {
+    setColumnToDelete(columnId);
+    setIsColumnDeleteAlertOpen(true);
+  };
+
+  const getDynamicColumnValueForInternship = (internshipId: string, columnId: string) => {
+    return dynamicColumnValues[internshipId]?.find(
+      value => value.column_id === columnId
+    );
+  };
+
   const generatePdf = () => {
     const doc = new jsPDF();
-
-    const columns = [
+    
+    // Add filter information at the top
+    let filterText = 'Filter Information:\n';
+    if (Object.keys(filters).length === 0) {
+      filterText += 'No filters applied. Showing all internships.';
+    } else {
+      for (const [key, value] of Object.entries(filters)) {
+        if (value) {
+          filterText += `${key.charAt(0).toUpperCase() + key.slice(1)}: ${value}\n`;
+        } else {
+          filterText += `${key.charAt(0).toUpperCase() + key.slice(1)}: All\n`;
+        }
+      }
+    }
+    
+    doc.setFontSize(10);
+    doc.text(filterText, 14, 15);
+    
+    // Create column headers for the table (standard + dynamic columns)
+    const standardColumns = [
       'Roll No',
       'Name',
       'Email',
@@ -279,179 +455,94 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       'Semester',
       'Faculty Coordinator',
     ];
-
-    const rows = internships.map((internship) => [
-      internship.roll_no,
-      internship.name,
-      internship.email,
-      internship.program,
-      internship.phone_no,
-      internship.position,
-      internship.domain,
-      internship.organization_name,
-      internship.starting_date,
-      internship.ending_date,
-      internship.session,
-      internship.year,
-      internship.semester,
-      internship.faculty_coordinator,
-    ]);
-
-    autoTable(doc, {
-      head: [columns],
-      body: rows,
+    
+    const allColumns = [
+      ...standardColumns,
+      ...dynamicColumns.map(column => column.name)
+    ];
+    
+    // Create data rows
+    const rows = internships.map(internship => {
+      const standardData = [
+        internship.roll_no || '',
+        internship.name || '',
+        internship.email || '',
+        internship.program || '',
+        internship.phone_no || '',
+        internship.position || '',
+        internship.domain || '',
+        internship.organization_name || '',
+        internship.starting_date || '',
+        internship.ending_date || '',
+        internship.session || '',
+        internship.year || '',
+        internship.semester || '',
+        internship.faculty_coordinator || '',
+      ];
+      
+      const dynamicData = dynamicColumns.map(column => {
+        const value = getDynamicColumnValueForInternship(internship.id, column.id);
+        return value ? value.value : '';
+      });
+      
+      return [...standardData, ...dynamicData];
     });
-
+    
+    // Start the table a bit lower to make room for filter info
+    autoTable(doc, {
+      startY: 30,
+      head: [allColumns],
+      body: rows,
+      styles: { fontSize: 8, cellPadding: 1 },
+      headStyles: { fillColor: [41, 128, 185] },
+    });
+    
     doc.save('internships.pdf');
   };
 
   const generateExcel = () => {
-    const data = internships.map((internship) => ({
-      'Roll No': internship.roll_no,
-      'Name': internship.name,
-      'Email': internship.email,
-      'Program': internship.program,
-      'Phone No': internship.phone_no,
-      'Position': internship.position,
-      'Domain': internship.domain,
-      'Organization Name': internship.organization_name,
-      'Starting Date': internship.starting_date,
-      'Ending Date': internship.ending_date,
-      'Session': internship.session,
-      'Year': internship.year,
-      'Semester': internship.semester,
-      'Faculty Coordinator': internship.faculty_coordinator,
-    }));
-
+    // Create column headers (standard + dynamic)
+    const standardHeaders = {
+      'Roll No': 'roll_no',
+      'Name': 'name',
+      'Email': 'email',
+      'Program': 'program',
+      'Phone No': 'phone_no',
+      'Position': 'position',
+      'Domain': 'domain',
+      'Organization Name': 'organization_name',
+      'Starting Date': 'starting_date',
+      'Ending Date': 'ending_date',
+      'Session': 'session',
+      'Year': 'year',
+      'Semester': 'semester',
+      'Faculty Coordinator': 'faculty_coordinator',
+    };
+    
+    // Prepare data for Excel
+    const data = internships.map(internship => {
+      // Start with standard fields
+      const row: Record<string, any> = {};
+      
+      // Add standard fields
+      for (const [header, field] of Object.entries(standardHeaders)) {
+        row[header] = internship[field] || '';
+      }
+      
+      // Add dynamic columns
+      for (const column of dynamicColumns) {
+        const value = getDynamicColumnValueForInternship(internship.id, column.id);
+        row[column.name] = value ? value.value : '';
+      }
+      
+      return row;
+    });
+    
+    // Generate Excel file
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(data);
     XLSX.utils.book_append_sheet(wb, ws, 'Internships');
     XLSX.writeFile(wb, 'internships.xlsx');
-  };
-
-  const handleAddColumn = async () => {
-    try {
-      await addDynamicColumn(newColumnName, newColumnType);
-      fetchDynamicColumns();
-      setShowAddColumnModal(false);
-      setNewColumnName('');
-      setNewColumnType('text');
-      toast({
-        title: 'Success',
-        description: 'Dynamic column added successfully!',
-      });
-    } catch (error) {
-      console.error('Error adding dynamic column:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to add dynamic column. Please try again.',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleDynamicValueChange = async (internshipId: string, columnId: string, value: any) => {
-    const existingValue = dynamicColumnValues[internshipId]?.find(item => item.dynamic_columns.id === columnId);
-
-    if (existingValue) {
-      try {
-        await supabase
-          .from('dynamic_column_values')
-          .update({ value: value })
-          .eq('id', existingValue.id);
-
-        setDynamicColumnValues(prevValues => {
-          const updatedProjectValues = prevValues[internshipId].map(item => {
-            if (item.dynamic_columns.id === columnId) {
-              return { ...item, value: value };
-            }
-            return item;
-          });
-
-          return {
-            ...prevValues,
-            [internshipId]: updatedProjectValues,
-          };
-        });
-
-        toast({
-          title: 'Success',
-          description: 'Dynamic column value updated successfully!',
-        });
-      } catch (error) {
-        console.error('Error updating dynamic column value:', error);
-        toast({
-          title: 'Error',
-          description: 'Failed to update dynamic column value. Please try again.',
-          variant: 'destructive',
-        });
-      }
-    } else {
-      try {
-        await addDynamicColumnValue(columnId, internshipId, value);
-
-        const updatedDynamicValues = await getDynamicColumnValues(internshipId);
-
-        setDynamicColumnValues(prevValues => ({
-          ...prevValues,
-          [internshipId]: updatedDynamicValues,
-        }));
-
-        toast({
-          title: 'Success',
-          description: 'Dynamic column value added successfully!',
-        });
-      } catch (error) {
-        console.error('Error adding dynamic column value:', error);
-        toast({
-          title: 'Error',
-          description: 'Failed to add dynamic column value. Please try again.',
-          variant: 'destructive',
-        });
-      }
-    }
-  };
-
-  const confirmDeleteColumn = () => {
-    if (columnToDelete) {
-      deleteColumn(columnToDelete);
-    }
-    setIsColumnDeleteAlertOpen(false);
-  };
-
-  const cancelDeleteColumn = () => {
-    setIsColumnDeleteAlertOpen(false);
-    setColumnToDelete(null);
-  };
-
-  const handleDeleteColumn = (columnId: string) => {
-    setColumnToDelete(columnId);
-    setIsColumnDeleteAlertOpen(true);
-  };
-
-  const deleteColumn = async (columnId: string) => {
-    try {
-      await deleteDynamicColumn(columnId);
-      fetchDynamicColumns();
-      setDynamicColumnValues(prevValues => {
-        const updatedValues = {};
-        for (const internshipId in prevValues) {
-          updatedValues[internshipId] = prevValues[internshipId].filter(item => item.column_id !== columnId);
-        }
-        return updatedValues;
-      });
-      toast({
-        title: 'Success',
-        description: 'Dynamic column deleted successfully!',
-      });
-    } catch (error) {
-      console.error('Error deleting dynamic column:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to delete dynamic column. Please try again.',
-        variant: 'destructive',
-      });
-    }
   };
 
   return (
@@ -464,7 +555,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
             onClick={generatePdf}
             className="mr-2"
           >
-            <FileText className="mr-2 h-4 w-4" />
+            <FilePdf className="mr-2 h-4 w-4" />
             Generate PDF
           </Button>
           <Button variant="outline" size="sm" onClick={generateExcel}>
@@ -485,128 +576,139 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         </div>
       </div>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-[50px]">Select</TableHead>
-            <TableHead>Roll No</TableHead>
-            <TableHead>Name</TableHead>
-            <TableHead>Email</TableHead>
-            <TableHead>Program</TableHead>
-            <TableHead>Phone No</TableHead>
-            <TableHead>Position</TableHead>
-            <TableHead>Domain</TableHead>
-            <TableHead>Organization Name</TableHead>
-            <TableHead>Starting Date</TableHead>
-            <TableHead>Ending Date</TableHead>
-            <TableHead>Session</TableHead>
-            <TableHead>Year</TableHead>
-            <TableHead>Semester</TableHead>
-            <TableHead>Faculty Coordinator</TableHead>
-            {dynamicColumns.map((column) => (
-              <TableHead key={column.id} className="relative">
-                {column.name}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => handleDeleteColumn(column.id)}
-                  className="absolute top-1 right-1"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </TableHead>
-            ))}
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {internships.map((internship) => (
-            <TableRow key={internship.id}>
-              <TableCell className="w-[50px]">
-                <Input
-                  type="checkbox"
-                  checked={selectedInternships.includes(internship.id)}
-                  onChange={() => handleSelectInternship(internship.id)}
-                />
-              </TableCell>
-              <TableCell>{internship.roll_no}</TableCell>
-              <TableCell>{internship.name}</TableCell>
-              <TableCell>{internship.email}</TableCell>
-              <TableCell>{internship.program}</TableCell>
-              <TableCell>{internship.phone_no}</TableCell>
-              <TableCell>{internship.position}</TableCell>
-              <TableCell>{internship.domain}</TableCell>
-              <TableCell>{internship.organization_name}</TableCell>
-              <TableCell>{internship.starting_date}</TableCell>
-              <TableCell>{internship.ending_date}</TableCell>
-              <TableCell>{internship.session}</TableCell>
-              <TableCell>{internship.year}</TableCell>
-              <TableCell>{internship.semester}</TableCell>
-              <TableCell>{internship.faculty_coordinator}</TableCell>
-              {dynamicColumns.map((column) => {
-                const dynamicValue = dynamicColumnValues[internship.id]?.find(item => item.dynamic_columns.id === column.id);
-                const value = dynamicValue ? dynamicValue.value : '';
-
-                return (
-                  <TableCell key={`${internship.id}-${column.id}`}>
-                    {editInternshipId === internship.id ? (
-                      <Input
-                        type="text"
-                        id={`dynamic-input-${column.id}`}
-                        defaultValue={value}
-                        onChange={(e) => handleDynamicValueChange(internship.id, column.id, e.target.value)}
-                      />
-                    ) : (
-                      value
-                    )}
-                  </TableCell>
-                );
-              })}
-              <TableCell className="text-right">
-                {editInternshipId === internship.id ? (
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      size="sm"
-                      onClick={handleSaveInternship}
-                      disabled={isSaving}
-                    >
-                      {isSaving ? (
-                        <>
-                          <Save className="mr-2 h-4 w-4 animate-spin" />
-                          Saving...
-                        </>
-                      ) : (
-                        <>
-                          <Save className="mr-2 h-4 w-4" />
-                          Save
-                        </>
-                      )}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setEditInternshipId(null)}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleEditInternship(internship)}
-                    >
-                      <Edit className="mr-2 h-4 w-4" />
-                      Edit
-                    </Button>
-                  </div>
-                )}
-              </TableCell>
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[50px]">Select</TableHead>
+              <TableHead>Roll No</TableHead>
+              <TableHead>Name</TableHead>
+              <TableHead>Email</TableHead>
+              <TableHead>Program</TableHead>
+              <TableHead>Phone No</TableHead>
+              <TableHead>Position</TableHead>
+              <TableHead>Domain</TableHead>
+              <TableHead>Organization Name</TableHead>
+              <TableHead>Starting Date</TableHead>
+              <TableHead>Ending Date</TableHead>
+              <TableHead>Session</TableHead>
+              <TableHead>Year</TableHead>
+              <TableHead>Semester</TableHead>
+              <TableHead>Faculty Coordinator</TableHead>
+              {dynamicColumns.map((column) => (
+                <TableHead key={column.id} className="relative">
+                  {column.name}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleDeleteColumn(column.id)}
+                    className="absolute top-1 right-1 h-5 w-5"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </TableHead>
+              ))}
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {internships.map((internship) => (
+              <TableRow key={internship.id}>
+                <TableCell className="w-[50px]">
+                  <Input
+                    type="checkbox"
+                    checked={selectedInternships.includes(internship.id)}
+                    onChange={() => handleSelectInternship(internship.id)}
+                  />
+                </TableCell>
+                <TableCell>{internship.roll_no}</TableCell>
+                <TableCell>{internship.name}</TableCell>
+                <TableCell>{internship.email}</TableCell>
+                <TableCell>{internship.program}</TableCell>
+                <TableCell>{internship.phone_no}</TableCell>
+                <TableCell>{internship.position}</TableCell>
+                <TableCell>{internship.domain}</TableCell>
+                <TableCell>{internship.organization_name}</TableCell>
+                <TableCell>{internship.starting_date}</TableCell>
+                <TableCell>{internship.ending_date}</TableCell>
+                <TableCell>{internship.session}</TableCell>
+                <TableCell>{internship.year}</TableCell>
+                <TableCell>{internship.semester}</TableCell>
+                <TableCell>{internship.faculty_coordinator}</TableCell>
+                
+                {dynamicColumns.map((column) => {
+                  const valueObj = getDynamicColumnValueForInternship(internship.id, column.id);
+                  
+                  return (
+                    <TableCell key={`${internship.id}-${column.id}`}>
+                      {valueObj ? (
+                        <InternshipDynamicField
+                          value={valueObj}
+                          isEditing={editInternshipId === internship.id}
+                          columnType={column.type}
+                          onChange={handleUpdateDynamicValue}
+                        />
+                      ) : (
+                        editInternshipId === internship.id && (
+                          <Input
+                            type="text"
+                            placeholder={`Enter ${column.name}`}
+                            onChange={(e) => 
+                              handleDynamicValueChange(internship.id, column.id, e.target.value)
+                            }
+                          />
+                        )
+                      )}
+                    </TableCell>
+                  );
+                })}
+                
+                <TableCell className="text-right">
+                  {editInternshipId === internship.id ? (
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        size="sm"
+                        onClick={handleSaveInternship}
+                        disabled={isSaving}
+                      >
+                        {isSaving ? (
+                          <>
+                            <Save className="mr-2 h-4 w-4 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="mr-2 h-4 w-4" />
+                            Save
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEditInternshipId(null)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleEditInternship(internship)}
+                      >
+                        <Edit className="mr-2 h-4 w-4" />
+                        Edit
+                      </Button>
+                    </div>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
 
       <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
         <AlertDialogContent>
@@ -631,8 +733,8 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog open={editInternshipId !== null} onOpenChange={() => setEditInternshipId(null)}>
-        <DialogContent>
+      <Dialog open={editInternshipId !== null} onOpenChange={(open) => !open && setEditInternshipId(null)}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Internship</DialogTitle>
             <DialogDescription>
@@ -680,7 +782,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
                 className="col-span-3"
               />
             </div>
-             <div className="grid grid-cols-4 items-center gap-4">
+            <div className="grid grid-cols-4 items-center gap-4">
               <label htmlFor="program" className="text-right">
                 Program
               </label>
@@ -693,7 +795,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
                 className="col-span-3"
               />
             </div>
-             <div className="grid grid-cols-4 items-center gap-4">
+            <div className="grid grid-cols-4 items-center gap-4">
               <label htmlFor="phone_no" className="text-right">
                 Phone No
               </label>
@@ -770,10 +872,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
                   <Calendar
                     mode="single"
                     selected={editedInternship?.starting_date ? new Date(editedInternship.starting_date) : undefined}
-                    onSelect={handleDateChange}
-                    disabled={(date) =>
-                      date > new Date() || date < new Date('2020-01-01')
-                    }
+                    onSelect={(date) => handleDateChange('starting_date', date)}
                     initialFocus
                   />
                 </PopoverContent>
@@ -804,10 +903,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
                   <Calendar
                     mode="single"
                     selected={editedInternship?.ending_date ? new Date(editedInternship.ending_date) : undefined}
-                    onSelect={handleDateChange}
-                    disabled={(date) =>
-                      date > new Date() || date < new Date('2020-01-01')
-                    }
+                    onSelect={(date) => handleDateChange('ending_date', date)}
                     initialFocus
                   />
                 </PopoverContent>
@@ -874,58 +970,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         </DialogContent>
       </Dialog>
 
-      <div className="flex justify-end mt-4">
-        <Button onClick={() => setShowAddColumnModal(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Dynamic Column
-        </Button>
-      </div>
-
-      <Dialog open={showAddColumnModal} onOpenChange={setShowAddColumnModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Dynamic Column</DialogTitle>
-            <DialogDescription>
-              Add a new column to the internship table.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="column_name" className="text-right">
-                Column Name
-              </label>
-              <Input
-                type="text"
-                id="column_name"
-                value={newColumnName}
-                onChange={(e) => setNewColumnName(e.target.value)}
-                className="col-span-3"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="column_type" className="text-right">
-                Column Type
-              </label>
-              <Select onValueChange={(value) => setNewColumnType(value)}>
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="Select a type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="text">Text</SelectItem>
-                  <SelectItem value="number">Number</SelectItem>
-                  <SelectItem value="date">Date</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex justify-end">
-            <Button type="button" onClick={handleAddColumn}>
-              Add Column
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       <AlertDialog open={isColumnDeleteAlertOpen} onOpenChange={setIsColumnDeleteAlertOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -935,7 +979,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={cancelDeleteColumn}>
+            <AlertDialogCancel onClick={() => setIsColumnDeleteAlertOpen(false)}>
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction onClick={confirmDeleteColumn}>
@@ -944,6 +988,19 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <div className="flex justify-end mt-4">
+        <Button onClick={() => setShowAddColumnModal(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Add Dynamic Column
+        </Button>
+      </div>
+
+      <InternshipColumnModal 
+        isOpen={showAddColumnModal} 
+        onClose={() => setShowAddColumnModal(false)}
+        onColumnAdded={() => fetchDynamicColumns()}
+      />
     </div>
   );
 };

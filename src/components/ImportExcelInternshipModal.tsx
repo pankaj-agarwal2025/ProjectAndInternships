@@ -1,266 +1,168 @@
 
 import React, { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { addInternship } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
 import * as XLSX from 'xlsx';
-import { Loader2, Upload } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { processInternshipsExcel } from '@/lib/supabase';
+import { FileSpreadsheet, Upload } from 'lucide-react';
 
 interface ImportExcelInternshipModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-const ImportExcelInternshipModal: React.FC<ImportExcelInternshipModalProps> = ({ isOpen, onClose }) => {
+const ImportExcelInternshipModal: React.FC<ImportExcelInternshipModalProps> = ({
+  isOpen,
+  onClose,
+}) => {
   const [file, setFile] = useState<File | null>(null);
-  const [session, setSession] = useState('');
-  const [year, setYear] = useState('');
-  const [semester, setSemester] = useState('');
-  const [facultyCoordinator, setFacultyCoordinator] = useState('');
-  const [isImporting, setIsImporting] = useState(false);
-  const [previewData, setPreviewData] = useState<any[] | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const { toast } = useToast();
-  
-  // Faculty coordinators list
-  const facultyCoordinators = [
-    'dr.pankaj', 'dr.anshu', 'dr.meenu', 'dr.swati'
-  ];
-  
+  const [facultyData, setFacultyData] = useState<any>(null);
+
+  React.useEffect(() => {
+    const storedFaculty = sessionStorage.getItem('faculty');
+    if (storedFaculty) {
+      setFacultyData(JSON.parse(storedFaculty));
+    }
+  }, []);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      setFile(selectedFile);
-      
-      // Preview Excel data
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-        if (evt.target?.result) {
-          const data = evt.target.result;
-          const workbook = XLSX.read(data, { type: 'binary' });
-          const firstSheet = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[firstSheet];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet);
-          setPreviewData(jsonData.slice(0, 5)); // Preview first 5 rows
-        }
-      };
-      reader.readAsBinaryString(selectedFile);
+    if (e.target.files && e.target.files.length > 0) {
+      setFile(e.target.files[0]);
     }
   };
-  
-  const handleImport = async () => {
+
+  const handleUpload = async () => {
     if (!file) {
       toast({
         title: 'No File Selected',
-        description: 'Please select an Excel file to import.',
+        description: 'Please select an Excel file to upload.',
         variant: 'destructive',
       });
       return;
     }
-    
-    if (!session || !year || !semester || !facultyCoordinator) {
+
+    if (!facultyData) {
       toast({
-        title: 'Missing Filters',
-        description: 'Please fill in all filter fields.',
+        title: 'Error',
+        description: 'Faculty information not found. Please log in again.',
         variant: 'destructive',
       });
       return;
     }
-    
-    setIsImporting(true);
-    
+
+    setIsUploading(true);
+
     try {
       const reader = new FileReader();
-      
-      reader.onload = async (evt) => {
-        if (evt.target?.result) {
-          const data = evt.target.result;
-          const workbook = XLSX.read(data, { type: 'binary' });
-          const firstSheet = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[firstSheet];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+      reader.onload = async (e) => {
+        try {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
           
-          // Process the data
-          let successCount = 0;
-          let errorCount = 0;
+          // Get the first worksheet
+          const wsname = workbook.SheetNames[0];
+          const ws = workbook.Sheets[wsname];
           
-          for (const row of jsonData) {
-            try {
-              const internshipData = {
-                roll_no: row['Roll No'] || '',
-                name: row['Name'] || '',
-                email: row['Email'] || '',
-                program: row['Program'] || '',
-                phone_no: row['Phone'] || '',
-                position: row['Position'] || '',
-                domain: row['Domain'] || '',
-                organization_name: row['Organization'] || '',
-                starting_date: row['Starting Date'] || null,
-                ending_date: row['Ending Date'] || null,
-                session: session,
-                year: year,
-                semester: semester,
-                faculty_coordinator: facultyCoordinator,
-                offer_letter_url: row['Offer Letter URL'] || '',
-                noc_url: row['NOC URL'] || '',
-                ppo_url: row['PPO URL'] || '',
-              };
-              
-              // Add the internship
-              const { data: result, error } = await supabase
-                .from('internships')
-                .insert([internshipData])
-                .select();
-              
-              if (error) {
-                console.error('Error adding internship:', error);
-                errorCount++;
-              } else {
-                successCount++;
-              }
-            } catch (error) {
-              console.error('Error importing row:', error);
-              errorCount++;
-            }
+          // Convert array of arrays to array of objects
+          const jsonData = XLSX.utils.sheet_to_json(ws);
+
+          if (jsonData.length === 0) {
+            throw new Error('Excel file is empty or has invalid format');
           }
-          
-          // Show results
-          if (successCount > 0) {
+
+          // Process and insert data into the database
+          const result = await processInternshipsExcel(jsonData, facultyData.name);
+
+          if (result) {
             toast({
-              title: 'Import Successful',
-              description: `Successfully imported ${successCount} internships.${errorCount > 0 ? ` Failed to import ${errorCount} entries.` : ''}`,
+              title: 'Success',
+              description: `Successfully imported ${result.length} internship records.`,
             });
             onClose();
+            // Refresh the internship table
+            window.location.reload();
           } else {
-            toast({
-              title: 'Import Failed',
-              description: 'Failed to import any internships. Please check the Excel format and try again.',
-              variant: 'destructive',
-            });
+            throw new Error('Failed to process Excel data');
           }
+        } catch (error) {
+          console.error('Error processing Excel file:', error);
+          toast({
+            title: 'Error',
+            description: 'Failed to process Excel file. Please check the format and try again.',
+            variant: 'destructive',
+          });
+        } finally {
+          setIsUploading(false);
         }
       };
-      
-      reader.readAsBinaryString(file);
+
+      reader.onerror = () => {
+        toast({
+          title: 'Error',
+          description: 'Failed to read the Excel file.',
+          variant: 'destructive',
+        });
+        setIsUploading(false);
+      };
+
+      reader.readAsArrayBuffer(file);
     } catch (error) {
-      console.error('Import error:', error);
+      console.error('Error uploading Excel file:', error);
       toast({
-        title: 'Import Error',
-        description: 'An error occurred during import. Please try again.',
+        title: 'Error',
+        description: 'An unexpected error occurred. Please try again.',
         variant: 'destructive',
       });
-    } finally {
-      setIsImporting(false);
+      setIsUploading(false);
     }
   };
-  
-  const handleClose = () => {
-    setFile(null);
-    setPreviewData(null);
-    setSession('');
-    setYear('');
-    setSemester('');
-    setFacultyCoordinator('');
-    onClose();
-  };
-  
+
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl">
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Import Internships from Excel</DialogTitle>
+          <DialogDescription>
+            Upload an Excel file with internship data. The file should have columns for name, email, roll number, etc.
+          </DialogDescription>
         </DialogHeader>
-        
-        <div className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="excel-file">Upload Excel File</Label>
+        <div className="grid gap-4 py-4">
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="excel-file" className="text-right">
+              Excel File
+            </Label>
             <Input
               id="excel-file"
               type="file"
-              accept=".xlsx,.xls"
+              accept=".xlsx, .xls"
               onChange={handleFileChange}
+              className="col-span-3"
             />
-            <p className="text-xs text-gray-500 mt-1">
-              Excel file should contain columns: Roll No, Name, Email, Program, Phone, Position, Domain, Organization, Starting Date, Ending Date, and optional file URLs.
-            </p>
           </div>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="import-session">Session</Label>
-              <Input
-                id="import-session"
-                value={session}
-                onChange={(e) => setSession(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="import-year">Year</Label>
-              <Input
-                id="import-year"
-                value={year}
-                onChange={(e) => setYear(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="import-semester">Semester</Label>
-              <Input
-                id="import-semester"
-                value={semester}
-                onChange={(e) => setSemester(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="import-faculty-coordinator">Faculty Coordinator</Label>
-              <Select value={facultyCoordinator} onValueChange={setFacultyCoordinator}>
-                <SelectTrigger id="import-faculty-coordinator">
-                  <SelectValue placeholder="Select coordinator" />
-                </SelectTrigger>
-                <SelectContent>
-                  {facultyCoordinators.map((fc) => (
-                    <SelectItem key={fc} value={fc}>{fc}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          
-          {previewData && previewData.length > 0 && (
-            <div className="space-y-2">
-              <Label>Data Preview (First 5 rows)</Label>
-              <div className="max-h-40 overflow-y-auto border rounded-md p-2">
-                <pre className="text-xs">{JSON.stringify(previewData, null, 2)}</pre>
-              </div>
-            </div>
-          )}
-          
-          <div className="flex justify-end space-x-2">
-            <Button variant="outline" onClick={handleClose}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleImport} 
-              disabled={isImporting || !file || !session || !year || !semester || !facultyCoordinator}
-            >
-              {isImporting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Importing...
-                </>
-              ) : (
-                <>
-                  <Upload className="mr-2 h-4 w-4" />
-                  Import Data
-                </>
-              )}
-            </Button>
-          </div>
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={handleUpload} disabled={isUploading}>
+            {isUploading ? (
+              <>
+                <FileSpreadsheet className="mr-2 h-4 w-4 animate-spin" />
+                Uploading...
+              </>
+            ) : (
+              <>
+                <Upload className="mr-2 h-4 w-4" />
+                Upload
+              </>
+            )}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
