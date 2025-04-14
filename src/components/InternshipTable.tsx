@@ -139,9 +139,37 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         query = query.ilike('faculty_coordinator', `%${filters.faculty_coordinator}%`);
       }
       
-      // Get count for pagination
-      const countQuery = query.clone();
-      const { count, error: countError } = await countQuery.count();
+      // Get count for pagination - create a separate query for counting
+      const countQuery = supabase
+        .from('internships')
+        .select('id', { count: 'exact' });
+      
+      // Apply the same filters to the count query
+      if (filters.roll_no) {
+        countQuery.ilike('roll_no', `%${filters.roll_no}%`);
+      }
+      
+      if (filters.name) {
+        countQuery.ilike('name', `%${filters.name}%`);
+      }
+      
+      if (filters.domain) {
+        countQuery.ilike('domain', `%${filters.domain}%`);
+      }
+      
+      if (filters.organization_name) {
+        countQuery.ilike('organization_name', `%${filters.organization_name}%`);
+      }
+      
+      if (filters.year) {
+        countQuery.ilike('year', `%${filters.year}%`);
+      }
+      
+      if (filters.faculty_coordinator) {
+        countQuery.ilike('faculty_coordinator', `%${filters.faculty_coordinator}%`);
+      }
+      
+      const { count, error: countError } = await countQuery;
       
       if (countError) {
         throw countError;
