@@ -686,39 +686,64 @@ export function parseDisplayDate(displayDate: string) {
 // Process Excel data for internships
 export async function processInternshipsExcel(excelData: any[], facultyCoordinator: string) {
   try {
+    console.log('Processing Excel data:', excelData);
+    
     const processedData = excelData.map(row => {
-      // Convert display dates to ISO format
-      let startDate = row.starting_date;
-      let endDate = row.ending_date;
+      // Convert display dates to ISO format if they're in DD-MM-YYYY format
+      let startDate = row.starting_date || '';
+      let endDate = row.ending_date || '';
       
+      // Check if the date is a string in DD-MM-YYYY format
       if (typeof startDate === 'string' && startDate.includes('-')) {
-        startDate = parseDisplayDate(startDate);
+        const parts = startDate.split('-');
+        if (parts.length === 3) {
+          // Convert from DD-MM-YYYY to YYYY-MM-DD
+          startDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+        }
+      } else if (typeof startDate === 'number') {
+        // Excel date number - convert to JS date
+        const excelEpoch = new Date(1899, 11, 30);
+        const date = new Date(excelEpoch.getTime() + startDate * 24 * 60 * 60 * 1000);
+        startDate = date.toISOString().split('T')[0];
       }
       
+      // Same for end date
       if (typeof endDate === 'string' && endDate.includes('-')) {
-        endDate = parseDisplayDate(endDate);
+        const parts = endDate.split('-');
+        if (parts.length === 3) {
+          // Convert from DD-MM-YYYY to YYYY-MM-DD
+          endDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+        }
+      } else if (typeof endDate === 'number') {
+        // Excel date number - convert to JS date
+        const excelEpoch = new Date(1899, 11, 30);
+        const date = new Date(excelEpoch.getTime() + endDate * 24 * 60 * 60 * 1000);
+        endDate = date.toISOString().split('T')[0];
       }
       
+      // Create the internship record with correct field mapping
       return {
-        roll_no: row.roll_no || '',
-        name: row.name || '',
-        email: row.email || '',
-        phone_no: row.phone_no || '',
-        domain: row.domain || '',
-        session: row.session || '',
-        year: row.year || '',
-        semester: row.semester || '',
-        program: row.program || '',
-        organization_name: row.organization_name || '',
+        roll_no: row.roll_no || row['Roll No'] || '',
+        name: row.name || row['Name'] || '',
+        email: row.email || row['Email'] || '',
+        phone_no: row.phone_no || row['Phone No'] || '',
+        domain: row.domain || row['Domain'] || '',
+        session: row.session || row['Session'] || '',
+        year: row.year || row['Year'] || '',
+        semester: row.semester || row['Semester'] || '',
+        program: row.program || row['Program'] || '',
+        organization_name: row.organization_name || row['Organization'] || row['Organization Name'] || '',
         starting_date: startDate,
         ending_date: endDate,
-        position: row.position || '',
-        offer_letter_url: row.offer_letter_url || '',
-        noc_url: row.noc_url || '',
-        ppo_url: row.ppo_url || '',
+        position: row.position || row['Position'] || '',
+        offer_letter_url: row.offer_letter_url || row['Offer Letter'] || '',
+        noc_url: row.noc_url || row['NOC'] || '',
+        ppo_url: row.ppo_url || row['PPO'] || '',
         faculty_coordinator: facultyCoordinator
       };
     });
+    
+    console.log('Processed data:', processedData);
     
     // Insert processed data into database
     const { data, error } = await supabase

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -104,6 +103,16 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
   useEffect(() => {
     fetchInternships();
     fetchDynamicColumns();
+
+    const handleAddNewInternship = () => {
+      handleAddInternship();
+    };
+
+    document.addEventListener('add-new-internship', handleAddNewInternship);
+
+    return () => {
+      document.removeEventListener('add-new-internship', handleAddNewInternship);
+    };
   }, [filters, page, perPage]);
 
   const fetchInternships = async () => {
@@ -114,7 +123,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         .select('*')
         .order('created_at', { ascending: false });
       
-      // Apply filters
       if (filters.roll_no) {
         query = query.ilike('roll_no', `%${filters.roll_no}%`);
       }
@@ -139,43 +147,14 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         query = query.ilike('faculty_coordinator', `%${filters.faculty_coordinator}%`);
       }
       
-      // Get count for pagination - create a separate query for counting
-      const countQuery = supabase
+      const { count, error: countError } = await supabase
         .from('internships')
         .select('id', { count: 'exact' });
-      
-      // Apply the same filters to the count query
-      if (filters.roll_no) {
-        countQuery.ilike('roll_no', `%${filters.roll_no}%`);
-      }
-      
-      if (filters.name) {
-        countQuery.ilike('name', `%${filters.name}%`);
-      }
-      
-      if (filters.domain) {
-        countQuery.ilike('domain', `%${filters.domain}%`);
-      }
-      
-      if (filters.organization_name) {
-        countQuery.ilike('organization_name', `%${filters.organization_name}%`);
-      }
-      
-      if (filters.year) {
-        countQuery.ilike('year', `%${filters.year}%`);
-      }
-      
-      if (filters.faculty_coordinator) {
-        countQuery.ilike('faculty_coordinator', `%${filters.faculty_coordinator}%`);
-      }
-      
-      const { count, error: countError } = await countQuery;
       
       if (countError) {
         throw countError;
       }
       
-      // Apply pagination
       const from = (page - 1) * perPage;
       const to = from + perPage - 1;
       
@@ -190,7 +169,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       setInternships(data || []);
       setTotalPages(Math.ceil((count as number) / perPage));
       
-      // Fetch dynamic column values for each internship
       const values: Record<string, any[]> = {};
       for (const internship of data || []) {
         const dynamicValues = await getInternshipDynamicColumnValues(internship.id);
@@ -267,13 +245,11 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
 
     setIsSaving(true);
     try {
-      // Update internship record
       await supabase
         .from('internships')
         .update(editedInternship)
         .eq('id', editRowId);
 
-      // Update dynamic column values
       if (dynamicColumnValues[editRowId]) {
         for (const dynamicValue of dynamicColumnValues[editRowId]) {
           const inputId = `dynamic-input-${dynamicValue.column_id}-${editRowId}`;
@@ -284,7 +260,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         }
       }
 
-      // Update PDF fields manually
       const pdfFields = ['offer_letter_url', 'noc_url', 'ppo_url'];
       for (const field of pdfFields) {
         const inputId = `${field}-${editRowId}`;
@@ -353,13 +328,11 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     setIsSaving(true);
     try {
       for (const internshipId of selectedInternships) {
-        // First delete any dynamic column values associated with this internship
         await supabase
           .from('internship_dynamic_column_values')
           .delete()
           .eq('internship_id', internshipId);
         
-        // Then delete the internship
         await supabase
           .from('internships')
           .delete()
@@ -576,11 +549,9 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
   const generatePdf = () => {
     const doc = new jsPDF();
     
-    // Add title at the top
     doc.setFontSize(16);
     doc.text("Internship Portal Report", 14, 10);
     
-    // Add filter information at the top
     let filterText = 'Filter Information:\n';
     if (Object.keys(filters).length === 0) {
       filterText += 'No filters applied. Showing all internships.';
@@ -596,7 +567,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     doc.setFontSize(10);
     doc.text(filterText, 14, 20);
     
-    // Create column headers for the table (standard + dynamic columns)
     const standardColumns = [
       'Roll No',
       'Name',
@@ -623,7 +593,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       ...dynamicColumns.map(column => column.name)
     ];
     
-    // Create data rows
     const rows = internships.map(internship => {
       const standardData = [
         internship.roll_no || '',
@@ -654,13 +623,11 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       return [...standardData, ...dynamicData];
     });
     
-    // Start the table a bit lower to make room for filter info
     autoTable(doc, {
       startY: 40,
       head: [allColumns],
       body: rows,
       didDrawPage: (data) => {
-        // Header on each page
         doc.setFontSize(10);
         doc.text("Internship Portal Report - " + new Date().toLocaleDateString(), data.settings.margin.left, 10);
       }
@@ -670,7 +637,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
   };
 
   const generateExcel = () => {
-    // Create column headers (standard + dynamic)
     const standardHeaders = {
       'Roll No': 'roll_no',
       'Name': 'name',
@@ -692,13 +658,11 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       'Faculty Coordinator': 'faculty_coordinator',
     };
     
-    // Create headers including dynamic columns
     const headers: Record<string, string> = { ...standardHeaders };
     for (const column of dynamicColumns) {
       headers[column.name] = column.id;
     }
     
-    // Export just structure without data
     const headerRow: Record<string, string> = {};
     Object.keys(headers).forEach(key => {
       headerRow[key] = '';
@@ -726,14 +690,11 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       const fileUrl = await uploadFile(fileForUpload, 'internships', fileName);
       
       if (fileUrl) {
-        // Check if it's a dynamic column or standard field
         const isDynamicColumn = dynamicColumns.some(col => col.id === fieldName);
         
         if (isDynamicColumn) {
-          // Handle dynamic column value update
           await handleDynamicValueChange(internshipId, fieldName, fileUrl);
         } else {
-          // Handle standard field update
           await supabase
             .from('internships')
             .update({ [fieldName]: fileUrl })
@@ -800,7 +761,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     }
   };
 
-  // Helper function to get value for PDF fields
   const getPdfFieldDisplay = (internshipId: string, field: string, value: string) => {
     if (editRowId === internshipId) {
       return (
@@ -860,7 +820,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     ) : 'Not available';
   };
 
-  // Function to render PDF/Link field for dynamic columns
   const renderDynamicPdfField = (internshipId: string, column: any, value: any) => {
     if (editRowId === internshipId && column.type === 'pdf') {
       return (
@@ -924,6 +883,294 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     }
     
     return value?.value || '';
+  };
+
+  const renderTableRow = (internship: any) => (
+    <TableRow key={internship.id} id={`internship-row-${internship.id}`} className="border-b hover:bg-gray-50">
+      <TableCell className="w-[50px]">
+        <Input
+          type="checkbox"
+          checked={selectedInternships.includes(internship.id)}
+          onChange={() => handleSelectInternship(internship.id)}
+        />
+      </TableCell>
+      <TableCell>
+        {editRowId === internship.id ? (
+          <Input
+            type="text"
+            name="roll_no"
+            value={editedInternship.roll_no || ''}
+            onChange={handleInputChange}
+          />
+        ) : (
+          internship.roll_no
+        )}
+      </TableCell>
+      <TableCell>
+        {editRowId === internship.id ? (
+          <Input
+            type="text"
+            name="name"
+            value={editedInternship.name || ''}
+            onChange={handleInputChange}
+          />
+        ) : (
+          internship.name
+        )}
+      </TableCell>
+      <TableCell>
+        {editRowId === internship.id ? (
+          <Input
+            type="email"
+            name="email"
+            value={editedInternship.email || ''}
+            onChange={handleInputChange}
+          />
+        ) : (
+          internship.email
+        )}
+      </TableCell>
+      <TableCell>
+        {editRowId === internship.id ? (
+          <Input
+            type="text"
+            name="phone_no"
+            value={editedInternship.phone_no || ''}
+            onChange={handleInputChange}
+          />
+        ) : (
+          internship.phone_no
+        )}
+      </TableCell>
+      <TableCell>
+        {editRowId === internship.id ? (
+          <Input
+            type="text"
+            name="domain"
+            value={editedInternship.domain || ''}
+            onChange={handleInputChange}
+          />
+        ) : (
+          internship.domain
+        )}
+      </TableCell>
+      <TableCell>
+        {editRowId === internship.id ? (
+          <Input
+            type="text"
+            name="organization_name"
+            value={editedInternship.organization_name || ''}
+            onChange={handleInputChange}
+          />
+        ) : (
+          internship.organization_name
+        )}
+      </TableCell>
+      <TableCell>
+        {editRowId === internship.id ? (
+          <Input
+            type="text"
+            name="position"
+            value={editedInternship.position || ''}
+            onChange={handleInputChange}
+          />
+        ) : (
+          internship.position
+        )}
+      </TableCell>
+      <TableCell>
+        {editRowId === internship.id ? (
+          <Input
+            type="date"
+            name="starting_date"
+            value={editedInternship.starting_date || ''}
+            onChange={handleInputChange}
+          />
+        ) : (
+          internship.starting_date
+        )}
+      </TableCell>
+      <TableCell>
+        {editRowId === internship.id ? (
+          <Input
+            type="date"
+            name="ending_date"
+            value={editedInternship.ending_date || ''}
+            onChange={handleInputChange}
+          />
+        ) : (
+          internship.ending_date
+        )}
+      </TableCell>
+      <TableCell>
+        {calculateInternshipDuration(internship.starting_date, internship.ending_date)}
+      </TableCell>
+      <TableCell>
+        {editRowId === internship.id ? (
+          <Input
+            type="text"
+            name="session"
+            value={editedInternship.session || ''}
+            onChange={handleInputChange}
+          />
+        ) : (
+          internship.session
+        )}
+      </TableCell>
+      <TableCell>
+        {editRowId === internship.id ? (
+          <Input
+            type="text"
+            name="year"
+            value={editedInternship.year || ''}
+            onChange={handleInputChange}
+          />
+        ) : (
+          internship.year
+        )}
+      </TableCell>
+      <TableCell>
+        {editRowId === internship.id ? (
+          <Input
+            type="text"
+            name="semester"
+            value={editedInternship.semester || ''}
+            onChange={handleInputChange}
+          />
+        ) : (
+          internship.semester
+        )}
+      </TableCell>
+      <TableCell>
+        {editRowId === internship.id ? (
+          <Input
+            type="text"
+            name="program"
+            value={editedInternship.program || ''}
+            onChange={handleInputChange}
+          />
+        ) : (
+          internship.program
+        )}
+      </TableCell>
+      <TableCell>
+        {getPdfFieldDisplay(internship.id, 'offer_letter_url', internship.offer_letter_url)}
+      </TableCell>
+      <TableCell>
+        {getPdfFieldDisplay(internship.id, 'noc_url', internship.noc_url)}
+      </TableCell>
+      <TableCell>
+        {getPdfFieldDisplay(internship.id, 'ppo_url', internship.ppo_url)}
+      </TableCell>
+      <TableCell>
+        {editRowId === internship.id ? (
+          <Input
+            type="text"
+            name="faculty_coordinator"
+            value={editedInternship.faculty_coordinator || ''}
+            onChange={handleInputChange}
+          />
+        ) : (
+          internship.faculty_coordinator
+        )}
+      </TableCell>
+      {dynamicColumns.map((column) => {
+        const dynamicValue = getDynamicColumnValueForInternship(internship.id, column.id);
+        return (
+          <TableCell key={`${internship.id}-${column.id}`}>
+            {renderDynamicPdfField(internship.id, column, dynamicValue)}
+          </TableCell>
+        );
+      })}
+      <TableCell className="text-right">
+        {editRowId === internship.id ? (
+          <div className="flex justify-end gap-2">
+            <Button
+              size="sm"
+              onClick={handleSaveRow}
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <>
+                  <Save className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="mr-2 h-4 w-4" />
+                  Save
+                </>
+              )}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setEditRowId(null)}
+            >
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleEditRow(internship)}
+          >
+            <Edit className="mr-2 h-4 w-4" />
+            Edit Row
+          </Button>
+        )}
+      </TableCell>
+    </TableRow>
+  );
+
+  const handleAddInternship = async () => {
+    try {
+      const facultyData = sessionStorage.getItem('faculty');
+      const faculty = facultyData ? JSON.parse(facultyData) : null;
+      
+      const { data, error } = await supabase
+        .from('internships')
+        .insert([{
+          roll_no: 'NEW',
+          name: 'New Internship',
+          faculty_coordinator: faculty ? faculty.name : '',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }])
+        .select()
+        .single();
+        
+      if (error) {
+        throw error;
+      }
+      
+      await fetchInternships();
+      
+      if (data) {
+        setEditRowId(data.id);
+        setEditedInternship(data);
+        
+        setTimeout(() => {
+          const row = document.getElementById(`internship-row-${data.id}`);
+          if (row) {
+            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 100);
+        
+        toast({
+          title: 'Success',
+          description: 'New internship added. Please fill in the details.',
+        });
+      }
+    } catch (error) {
+      console.error('Error adding internship:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to add new internship. Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
   return (
@@ -1013,244 +1260,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
                 </TableCell>
               </TableRow>
             ) : (
-              internships.map((internship) => (
-                <TableRow key={internship.id} className="border-b hover:bg-gray-50">
-                  <TableCell className="w-[50px]">
-                    <Input
-                      type="checkbox"
-                      checked={selectedInternships.includes(internship.id)}
-                      onChange={() => handleSelectInternship(internship.id)}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    {editRowId === internship.id ? (
-                      <Input
-                        type="text"
-                        name="roll_no"
-                        value={editedInternship.roll_no || ''}
-                        onChange={handleInputChange}
-                      />
-                    ) : (
-                      internship.roll_no
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editRowId === internship.id ? (
-                      <Input
-                        type="text"
-                        name="name"
-                        value={editedInternship.name || ''}
-                        onChange={handleInputChange}
-                      />
-                    ) : (
-                      internship.name
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editRowId === internship.id ? (
-                      <Input
-                        type="email"
-                        name="email"
-                        value={editedInternship.email || ''}
-                        onChange={handleInputChange}
-                      />
-                    ) : (
-                      internship.email
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editRowId === internship.id ? (
-                      <Input
-                        type="text"
-                        name="phone_no"
-                        value={editedInternship.phone_no || ''}
-                        onChange={handleInputChange}
-                      />
-                    ) : (
-                      internship.phone_no
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editRowId === internship.id ? (
-                      <Input
-                        type="text"
-                        name="domain"
-                        value={editedInternship.domain || ''}
-                        onChange={handleInputChange}
-                      />
-                    ) : (
-                      internship.domain
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editRowId === internship.id ? (
-                      <Input
-                        type="text"
-                        name="organization_name"
-                        value={editedInternship.organization_name || ''}
-                        onChange={handleInputChange}
-                      />
-                    ) : (
-                      internship.organization_name
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editRowId === internship.id ? (
-                      <Input
-                        type="text"
-                        name="position"
-                        value={editedInternship.position || ''}
-                        onChange={handleInputChange}
-                      />
-                    ) : (
-                      internship.position
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editRowId === internship.id ? (
-                      <Input
-                        type="date"
-                        name="starting_date"
-                        value={editedInternship.starting_date || ''}
-                        onChange={handleInputChange}
-                      />
-                    ) : (
-                      internship.starting_date
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editRowId === internship.id ? (
-                      <Input
-                        type="date"
-                        name="ending_date"
-                        value={editedInternship.ending_date || ''}
-                        onChange={handleInputChange}
-                      />
-                    ) : (
-                      internship.ending_date
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {calculateInternshipDuration(internship.starting_date, internship.ending_date)}
-                  </TableCell>
-                  <TableCell>
-                    {editRowId === internship.id ? (
-                      <Input
-                        type="text"
-                        name="session"
-                        value={editedInternship.session || ''}
-                        onChange={handleInputChange}
-                      />
-                    ) : (
-                      internship.session
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editRowId === internship.id ? (
-                      <Input
-                        type="text"
-                        name="year"
-                        value={editedInternship.year || ''}
-                        onChange={handleInputChange}
-                      />
-                    ) : (
-                      internship.year
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editRowId === internship.id ? (
-                      <Input
-                        type="text"
-                        name="semester"
-                        value={editedInternship.semester || ''}
-                        onChange={handleInputChange}
-                      />
-                    ) : (
-                      internship.semester
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editRowId === internship.id ? (
-                      <Input
-                        type="text"
-                        name="program"
-                        value={editedInternship.program || ''}
-                        onChange={handleInputChange}
-                      />
-                    ) : (
-                      internship.program
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {getPdfFieldDisplay(internship.id, 'offer_letter_url', internship.offer_letter_url)}
-                  </TableCell>
-                  <TableCell>
-                    {getPdfFieldDisplay(internship.id, 'noc_url', internship.noc_url)}
-                  </TableCell>
-                  <TableCell>
-                    {getPdfFieldDisplay(internship.id, 'ppo_url', internship.ppo_url)}
-                  </TableCell>
-                  <TableCell>
-                    {editRowId === internship.id ? (
-                      <Input
-                        type="text"
-                        name="faculty_coordinator"
-                        value={editedInternship.faculty_coordinator || ''}
-                        onChange={handleInputChange}
-                      />
-                    ) : (
-                      internship.faculty_coordinator
-                    )}
-                  </TableCell>
-                  {dynamicColumns.map((column) => {
-                    const dynamicValue = getDynamicColumnValueForInternship(internship.id, column.id);
-                    return (
-                      <TableCell key={`${internship.id}-${column.id}`}>
-                        {renderDynamicPdfField(internship.id, column, dynamicValue)}
-                      </TableCell>
-                    );
-                  })}
-                  <TableCell className="text-right">
-                    {editRowId === internship.id ? (
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          size="sm"
-                          onClick={handleSaveRow}
-                          disabled={isSaving}
-                        >
-                          {isSaving ? (
-                            <>
-                              <Save className="mr-2 h-4 w-4 animate-spin" />
-                              Saving...
-                            </>
-                          ) : (
-                            <>
-                              <Save className="mr-2 h-4 w-4" />
-                              Save
-                            </>
-                          )}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setEditRowId(null)}
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEditRow(internship)}
-                      >
-                        <Edit className="mr-2 h-4 w-4" />
-                        Edit Row
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))
+              internships.map(renderTableRow)
             )}
           </TableBody>
         </Table>

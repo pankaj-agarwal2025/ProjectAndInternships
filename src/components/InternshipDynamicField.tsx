@@ -45,7 +45,7 @@ const InternshipDynamicField: React.FC<InternshipDynamicFieldProps> = ({
     );
   }
 
-  return <span>{value.value}</span>;
+  return <span>{value.value || ''}</span>;
 };
 
 export default InternshipDynamicField;

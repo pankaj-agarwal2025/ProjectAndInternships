@@ -71,6 +71,7 @@ const ImportExcelInternshipModal: React.FC<ImportExcelInternshipModalProps> = ({
           
           // Convert array of arrays to array of objects
           const jsonData = XLSX.utils.sheet_to_json(ws);
+          console.log("Excel data parsed:", jsonData);
 
           if (jsonData.length === 0) {
             throw new Error('Excel file is empty or has invalid format');

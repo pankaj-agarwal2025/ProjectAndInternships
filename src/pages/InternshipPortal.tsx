@@ -63,6 +63,12 @@ const InternshipPortal = () => {
     setFilters(newFilters);
   };
 
+  const handleAddNewInternship = () => {
+    // Dispatch a custom event that InternshipTable can listen for
+    const event = new CustomEvent('add-new-internship');
+    document.dispatchEvent(event);
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -106,13 +112,7 @@ const InternshipPortal = () => {
             </Button>
             <Button 
               className="bg-primary hover:bg-primary/90 flex items-center"
-              onClick={() => {
-                // Add new internship directly to the table
-                const addInternshipButton = document.querySelector('[data-add-internship]');
-                if (addInternshipButton) {
-                  (addInternshipButton as HTMLButtonElement).click();
-                }
-              }}
+              onClick={handleAddNewInternship}
               data-testid="add-new-internship"
             >
               <PlusCircle size={18} className="mr-2" />
