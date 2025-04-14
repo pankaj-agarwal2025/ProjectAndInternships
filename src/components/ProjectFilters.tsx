@@ -1,209 +1,273 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { supabase } from '@/integrations/supabase/client';
+import { Button } from '@/components/ui/button';
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from '@/components/ui/select';
+import { X, Filter, Plus } from 'lucide-react';
 
 interface ProjectFiltersProps {
   onFilterChange: (filters: Record<string, any>) => void;
 }
 
-const ProjectFilters = ({ onFilterChange }: ProjectFiltersProps) => {
-  const [filters, setFilters] = useState<Record<string, any>>({});
-  const [years, setYears] = useState<string[]>([]);
-  const [semesters, setSemesters] = useState<string[]>([]);
-  const [sessions, setSessions] = useState<string[]>([]);
-  const [facultyCoordinators, setFacultyCoordinators] = useState<string[]>([]);
-  const [programs, setPrograms] = useState<string[]>([]);
+const ProjectFilters: React.FC<ProjectFiltersProps> = ({ onFilterChange }) => {
+  const [filters, setFilters] = useState<Record<string, any>>({
+    group_no: '',
+    year: '',
+    semester: '',
+    session: '',
+    faculty_coordinator: '',
+    program: '',
+    searchTerm: '',
+  });
 
-  // Fetch distinct values for select filters
-  useEffect(() => {
-    const fetchFilterOptions = async () => {
-      // Fetch distinct years
-      const { data: yearData } = await supabase
-        .from('projects')
-        .select('year')
-        .not('year', 'is', null);
-      
-      if (yearData) {
-        const uniqueYears = Array.from(new Set(yearData.map(item => item.year))).filter(Boolean);
-        setYears(uniqueYears);
-      }
-      
-      // Fetch distinct semesters
-      const { data: semesterData } = await supabase
-        .from('projects')
-        .select('semester')
-        .not('semester', 'is', null);
-      
-      if (semesterData) {
-        const uniqueSemesters = Array.from(new Set(semesterData.map(item => item.semester))).filter(Boolean);
-        setSemesters(uniqueSemesters);
-      }
-      
-      // Fetch distinct sessions
-      const { data: sessionData } = await supabase
-        .from('projects')
-        .select('session')
-        .not('session', 'is', null);
-      
-      if (sessionData) {
-        const uniqueSessions = Array.from(new Set(sessionData.map(item => item.session))).filter(Boolean);
-        setSessions(uniqueSessions);
-      }
-      
-      // Fetch distinct faculty coordinators
-      const { data: facultyData } = await supabase
-        .from('projects')
-        .select('faculty_coordinator')
-        .not('faculty_coordinator', 'is', null);
-      
-      if (facultyData) {
-        const uniqueFaculty = Array.from(new Set(facultyData.map(item => item.faculty_coordinator))).filter(Boolean);
-        setFacultyCoordinators(uniqueFaculty);
-      }
-      
-      // Fetch distinct programs
-      const { data: studentData } = await supabase
-        .from('students')
-        .select('program')
-        .not('program', 'is', null);
-      
-      if (studentData) {
-        const uniquePrograms = Array.from(new Set(studentData.map(item => item.program))).filter(Boolean);
-        setPrograms(uniquePrograms);
-      }
+  const [additionalFilters, setAdditionalFilters] = useState<string[]>([]);
+  const [showAddFilter, setShowAddFilter] = useState(false);
+  const [newFilterName, setNewFilterName] = useState('');
+
+  const handleFilterChange = (
+    name: string,
+    value: string | number | boolean
+  ) => {
+    const updatedFilters = { ...filters, [name]: value };
+    setFilters(updatedFilters);
+    onFilterChange(updatedFilters);
+  };
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    handleFilterChange('searchTerm', e.target.value);
+  };
+
+  const handleReset = () => {
+    const resetFilters = {
+      group_no: '',
+      year: '',
+      semester: '',
+      session: '',
+      faculty_coordinator: '',
+      program: '',
+      searchTerm: '',
     };
     
-    fetchFilterOptions();
-  }, []);
-
-  const handleGroupChange = (value: string) => {
-    setFilters({ ...filters, group_no: value });
+    additionalFilters.forEach(filter => {
+      resetFilters[filter] = '';
+    });
+    
+    setFilters(resetFilters);
+    onFilterChange(resetFilters);
   };
 
-  const handleYearChange = (value: string) => {
-    setFilters({ ...filters, year: value === 'all_years' ? '' : value });
+  const handleAddFilter = () => {
+    if (newFilterName.trim() && !additionalFilters.includes(newFilterName.trim())) {
+      const filterId = newFilterName.trim().toLowerCase().replace(/\s+/g, '_');
+      setAdditionalFilters([...additionalFilters, filterId]);
+      setFilters({ ...filters, [filterId]: '' });
+      setNewFilterName('');
+      setShowAddFilter(false);
+    }
   };
 
-  const handleSemesterChange = (value: string) => {
-    setFilters({ ...filters, semester: value === 'all_semesters' ? '' : value });
+  const handleRemoveFilter = (filterId: string) => {
+    const updatedAdditionalFilters = additionalFilters.filter(id => id !== filterId);
+    const updatedFilters = { ...filters };
+    delete updatedFilters[filterId];
+    
+    setAdditionalFilters(updatedAdditionalFilters);
+    setFilters(updatedFilters);
+    onFilterChange(updatedFilters);
   };
 
-  const handleSessionChange = (value: string) => {
-    setFilters({ ...filters, session: value === 'all_sessions' ? '' : value });
+  const formatFilterName = (name: string) => {
+    return name
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
   };
-
-  const handleFacultyCoordinatorChange = (value: string) => {
-    setFilters({ ...filters, faculty_coordinator: value === 'all_faculty' ? '' : value });
-  };
-
-  const handleProgramChange = (value: string) => {
-    setFilters({ ...filters, program: value === 'all_programs' ? '' : value });
-  };
-
-  const handleSearchTermChange = (value: string) => {
-    setFilters({ ...filters, searchTerm: value });
-  };
-
-  useEffect(() => {
-    onFilterChange(filters);
-  }, [filters, onFilterChange]);
 
   return (
-    <div className="flex flex-wrap gap-4 items-center">
-      <div className="grid gap-2">
-        <Label htmlFor="searchTerm">Search</Label>
-        <Input
-          id="searchTerm"
-          placeholder="Search projects..."
-          onChange={(e) => handleSearchTermChange(e.target.value)}
-        />
+    <div className="space-y-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+      <div className="flex flex-wrap gap-4">
+        <div className="flex-1 min-w-[200px]">
+          <label htmlFor="searchTerm" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Search
+          </label>
+          <Input
+            id="searchTerm"
+            type="text"
+            placeholder="Search by title or group no..."
+            value={filters.searchTerm}
+            onChange={handleSearchChange}
+          />
+        </div>
+        
+        <div className="w-full md:w-auto">
+          <label htmlFor="group_no" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Group No
+          </label>
+          <Input
+            id="group_no"
+            type="text"
+            placeholder="Group No"
+            value={filters.group_no}
+            onChange={(e) => handleFilterChange('group_no', e.target.value)}
+          />
+        </div>
+        
+        <div className="w-full md:w-auto">
+          <label htmlFor="year" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Year
+          </label>
+          <Input
+            id="year"
+            type="text"
+            placeholder="Year"
+            value={filters.year}
+            onChange={(e) => handleFilterChange('year', e.target.value)}
+          />
+        </div>
+        
+        <div className="w-full md:w-auto">
+          <label htmlFor="semester" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Semester
+          </label>
+          <Select
+            value={filters.semester}
+            onValueChange={(value) => handleFilterChange('semester', value)}
+          >
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Select Semester" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">All Semesters</SelectItem>
+              <SelectItem value="1">Semester 1</SelectItem>
+              <SelectItem value="2">Semester 2</SelectItem>
+              <SelectItem value="3">Semester 3</SelectItem>
+              <SelectItem value="4">Semester 4</SelectItem>
+              <SelectItem value="5">Semester 5</SelectItem>
+              <SelectItem value="6">Semester 6</SelectItem>
+              <SelectItem value="7">Semester 7</SelectItem>
+              <SelectItem value="8">Semester 8</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        
+        <div className="w-full md:w-auto">
+          <label htmlFor="session" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Session
+          </label>
+          <Input
+            id="session"
+            type="text"
+            placeholder="Session"
+            value={filters.session}
+            onChange={(e) => handleFilterChange('session', e.target.value)}
+          />
+        </div>
+        
+        <div className="w-full md:w-auto">
+          <label htmlFor="faculty_coordinator" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Faculty Coordinator
+          </label>
+          <Input
+            id="faculty_coordinator"
+            type="text"
+            placeholder="Faculty Coordinator"
+            value={filters.faculty_coordinator}
+            onChange={(e) => handleFilterChange('faculty_coordinator', e.target.value)}
+          />
+        </div>
+        
+        <div className="w-full md:w-auto">
+          <label htmlFor="program" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Program
+          </label>
+          <Input
+            id="program"
+            type="text"
+            placeholder="Program"
+            value={filters.program}
+            onChange={(e) => handleFilterChange('program', e.target.value)}
+          />
+        </div>
+        
+        {additionalFilters.map(filterId => (
+          <div key={filterId} className="w-full md:w-auto relative">
+            <label htmlFor={filterId} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              {formatFilterName(filterId)}
+            </label>
+            <div className="flex">
+              <Input
+                id={filterId}
+                type="text"
+                placeholder={formatFilterName(filterId)}
+                value={filters[filterId] || ''}
+                onChange={(e) => handleFilterChange(filterId, e.target.value)}
+              />
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="absolute right-0 top-6"
+                onClick={() => handleRemoveFilter(filterId)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        ))}
       </div>
-
-      <div className="grid gap-2">
-        <Label htmlFor="group">Group No</Label>
-        <Input
-          id="group"
-          placeholder="Filter by group no..."
-          onChange={(e) => handleGroupChange(e.target.value)}
-        />
-      </div>
-
-      <div className="grid gap-2">
-        <Label htmlFor="year">Year</Label>
-        <Select onValueChange={handleYearChange}>
-          <SelectTrigger id="year">
-            <SelectValue placeholder="Select year" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all_years">All Years</SelectItem>
-            {years.map((year) => (
-              <SelectItem key={year} value={year}>{year}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="grid gap-2">
-        <Label htmlFor="semester">Semester</Label>
-        <Select onValueChange={handleSemesterChange}>
-          <SelectTrigger id="semester">
-            <SelectValue placeholder="Select semester" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all_semesters">All Semesters</SelectItem>
-            {semesters.map((semester) => (
-              <SelectItem key={semester} value={semester}>{semester}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="grid gap-2">
-        <Label htmlFor="session">Session</Label>
-        <Select onValueChange={handleSessionChange}>
-          <SelectTrigger id="session">
-            <SelectValue placeholder="Select session" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all_sessions">All Sessions</SelectItem>
-            {sessions.map((session) => (
-              <SelectItem key={session} value={session}>{session}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="grid gap-2">
-        <Label htmlFor="faculty_coordinator">Faculty Coordinator</Label>
-        <Select onValueChange={handleFacultyCoordinatorChange}>
-          <SelectTrigger id="faculty_coordinator">
-            <SelectValue placeholder="Select coordinator" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all_faculty">All Faculty</SelectItem>
-            {facultyCoordinators.map((faculty) => (
-              <SelectItem key={faculty} value={faculty}>{faculty}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="grid gap-2">
-        <Label htmlFor="program">Program</Label>
-        <Select onValueChange={handleProgramChange}>
-          <SelectTrigger id="program">
-            <SelectValue placeholder="Select program" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all_programs">All Programs</SelectItem>
-            {programs.map((program) => (
-              <SelectItem key={program} value={program}>{program}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      
+      <div className="flex flex-wrap justify-between items-center mt-4">
+        <div className="flex items-center space-x-2">
+          {showAddFilter ? (
+            <div className="flex items-center space-x-2">
+              <Input
+                type="text"
+                placeholder="Filter name"
+                value={newFilterName}
+                onChange={(e) => setNewFilterName(e.target.value)}
+                className="w-40"
+              />
+              <Button size="sm" onClick={handleAddFilter}>Add</Button>
+              <Button size="sm" variant="ghost" onClick={() => setShowAddFilter(false)}>Cancel</Button>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAddFilter(true)}
+              className="flex items-center"
+            >
+              <Plus className="mr-1 h-4 w-4" />
+              Add Filter
+            </Button>
+          )}
+        </div>
+        
+        <div className="flex items-center space-x-2 mt-2 sm:mt-0">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleReset}
+            className="flex items-center"
+          >
+            <X className="mr-1 h-4 w-4" />
+            Reset Filters
+          </Button>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => onFilterChange(filters)}
+            className="flex items-center"
+          >
+            <Filter className="mr-1 h-4 w-4" />
+            Apply Filters
+          </Button>
+        </div>
       </div>
     </div>
   );

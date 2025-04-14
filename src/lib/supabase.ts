@@ -26,8 +26,12 @@ export interface Project {
   progress_form_url?: string;
   presentation_url?: string;
   report_url?: string;
+  initial_evaluation?: string;
+  progress_evaluation?: string;
+  final_evaluation?: string;
   created_at: string;
   updated_at: string;
+  students?: Student[];
 }
 
 export interface Student {
@@ -126,6 +130,48 @@ export async function setupDatabase() {
     
     if (internshipsError) {
       console.error('Error checking internships table:', internshipsError);
+    }
+
+    // Check if evaluation columns exist in projects table
+    if (projects && projects.length > 0) {
+      // Get the first project to check if it has the evaluation columns
+      const { data: projectData, error: projectDataError } = await supabase
+        .from('projects')
+        .select('initial_evaluation, progress_evaluation, final_evaluation')
+        .eq('id', projects[0].id)
+        .single();
+      
+      if (projectDataError) {
+        console.error('Error checking evaluation columns:', projectDataError);
+        
+        // Add the evaluation columns
+        try {
+          // Add initial_evaluation column
+          await supabase.rpc('add_column_if_not_exists', {
+            table_name: 'projects',
+            column_name: 'initial_evaluation',
+            column_type: 'text'
+          });
+          
+          // Add progress_evaluation column
+          await supabase.rpc('add_column_if_not_exists', {
+            table_name: 'projects',
+            column_name: 'progress_evaluation',
+            column_type: 'text'
+          });
+          
+          // Add final_evaluation column
+          await supabase.rpc('add_column_if_not_exists', {
+            table_name: 'projects',
+            column_name: 'final_evaluation',
+            column_type: 'text'
+          });
+          
+          console.log('Added evaluation columns to projects table');
+        } catch (e) {
+          console.error('Error adding evaluation columns:', e);
+        }
+      }
     }
 
     // Add default faculty users
@@ -334,6 +380,15 @@ export async function deleteProject(id: string) {
 // Upload file to Supabase storage
 export async function uploadFile(file: File, bucket: string, path: string) {
   try {
+    // Check if storage bucket exists, if not create it
+    const { data: buckets } = await supabase.storage.listBuckets();
+    
+    if (!buckets.some(b => b.name === bucket)) {
+      await supabase.storage.createBucket(bucket, {
+        public: true
+      });
+    }
+    
     const { data, error } = await supabase.storage
       .from(bucket)
       .upload(path, file, {
