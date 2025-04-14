@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -27,7 +26,6 @@ import {
   X,
   Link,
   File,
-  FilePdf,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import {
@@ -245,7 +243,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     setIsSaving(true);
     try {
       for (const internshipId of selectedInternships) {
-        // First, delete dynamic column values associated with the internship
         const { error: valuesError } = await supabase
           .from('internship_dynamic_column_values')
           .delete()
@@ -253,7 +250,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         
         if (valuesError) throw valuesError;
         
-        // Then delete the internship
         const { error } = await supabase
           .from('internships')
           .delete()
@@ -292,7 +288,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         throw new Error('Failed to update dynamic column value');
       }
       
-      // Update local state to reflect the change
       const updatedValues = { ...dynamicColumnValues };
       
       for (const internshipId in updatedValues) {
@@ -326,7 +321,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         
       if (error) throw error;
       
-      // Update local state
       setDynamicColumnValues(prev => ({
         ...prev,
         [internshipId]: [...(prev[internshipId] || []), data[0]]
@@ -341,16 +335,13 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
 
   const handleDynamicValueChange = async (internshipId: string, columnId: string, newValue: string) => {
     try {
-      // Check if a value already exists for this internship and column
       const existingValue = dynamicColumnValues[internshipId]?.find(
         v => v.column_id === columnId
       );
       
       if (existingValue) {
-        // Update existing value
         await handleUpdateDynamicValue(existingValue.id, newValue);
       } else {
-        // Add new value
         await handleAddDynamicValue(internshipId, columnId, newValue);
       }
       
@@ -376,7 +367,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         if (result) {
           fetchDynamicColumns();
           
-          // Update local state to remove all references to this column
           const updatedValues = { ...dynamicColumnValues };
           for (const internshipId in updatedValues) {
             updatedValues[internshipId] = updatedValues[internshipId].filter(
@@ -421,7 +411,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
   const generatePdf = () => {
     const doc = new jsPDF();
     
-    // Add filter information at the top
     let filterText = 'Filter Information:\n';
     if (Object.keys(filters).length === 0) {
       filterText += 'No filters applied. Showing all internships.';
@@ -438,7 +427,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     doc.setFontSize(10);
     doc.text(filterText, 14, 15);
     
-    // Create column headers for the table (standard + dynamic columns)
     const standardColumns = [
       'Roll No',
       'Name',
@@ -461,7 +449,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       ...dynamicColumns.map(column => column.name)
     ];
     
-    // Create data rows
     const rows = internships.map(internship => {
       const standardData = [
         internship.roll_no || '',
@@ -488,7 +475,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       return [...standardData, ...dynamicData];
     });
     
-    // Start the table a bit lower to make room for filter info
     autoTable(doc, {
       startY: 30,
       head: [allColumns],
@@ -501,7 +487,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
   };
 
   const generateExcel = () => {
-    // Create column headers (standard + dynamic)
     const standardHeaders = {
       'Roll No': 'roll_no',
       'Name': 'name',
@@ -519,17 +504,13 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       'Faculty Coordinator': 'faculty_coordinator',
     };
     
-    // Prepare data for Excel
     const data = internships.map(internship => {
-      // Start with standard fields
       const row: Record<string, any> = {};
       
-      // Add standard fields
       for (const [header, field] of Object.entries(standardHeaders)) {
         row[header] = internship[field] || '';
       }
       
-      // Add dynamic columns
       for (const column of dynamicColumns) {
         const value = getDynamicColumnValueForInternship(internship.id, column.id);
         row[column.name] = value ? value.value : '';
@@ -538,7 +519,6 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       return row;
     });
     
-    // Generate Excel file
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(data);
     XLSX.utils.book_append_sheet(wb, ws, 'Internships');
@@ -555,7 +535,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
             onClick={generatePdf}
             className="mr-2"
           >
-            <FilePdf className="mr-2 h-4 w-4" />
+            <FileText className="mr-2 h-4 w-4" />
             Generate PDF
           </Button>
           <Button variant="outline" size="sm" onClick={generateExcel}>
