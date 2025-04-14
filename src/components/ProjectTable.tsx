@@ -25,11 +25,10 @@ import {
   Edit,
   Plus,
   X,
-  FilePlus,
   File,
-  Link,
+  Link as LinkIcon,
   ExternalLink,
-  Check
+  Users,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import {
@@ -60,7 +59,14 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { addDynamicColumn, getDynamicColumns, addDynamicColumnValue, getDynamicColumnValues, deleteDynamicColumn, uploadFile } from '@/lib/supabase';
+import { 
+  addDynamicColumn, 
+  getDynamicColumns, 
+  addDynamicColumnValue, 
+  getDynamicColumnValues, 
+  deleteDynamicColumn, 
+  uploadFile 
+} from '@/lib/supabase';
 import { Project, Student } from '@/lib/supabase';
 
 interface ProjectTableProps {
@@ -79,11 +85,11 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
   const [showStudentModal, setShowStudentModal] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [dynamicColumns, setDynamicColumns] = useState([]);
+  const [dynamicColumns, setDynamicColumns] = useState<any[]>([]);
   const [showAddColumnModal, setShowAddColumnModal] = useState(false);
   const [newColumnName, setNewColumnName] = useState('');
   const [newColumnType, setNewColumnType] = useState('text');
-  const [dynamicColumnValues, setDynamicColumnValues] = useState({});
+  const [dynamicColumnValues, setDynamicColumnValues] = useState<Record<string, any[]>>({});
   const [isColumnDeleteAlertOpen, setIsColumnDeleteAlertOpen] = useState(false);
   const [columnToDelete, setColumnToDelete] = useState<string | null>(null);
   const [fileForUpload, setFileForUpload] = useState<File | null>(null);
@@ -154,7 +160,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
 
       if (projectsData) {
         setProjects(projectsData);
-        const values = {};
+        const values: Record<string, any[]> = {};
         for (const project of projectsData) {
           const dynamicValues = await getDynamicColumnValues(project.id);
           values[project.id] = dynamicValues;
@@ -250,7 +256,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
         for (const field of pdfFields) {
           const inputId = `${field}-${editRowId}`;
           const inputElement = document.getElementById(inputId) as HTMLInputElement;
-          if (inputElement && inputElement.value !== editedProject[field]) {
+          if (inputElement && inputElement.value !== (editedProject as any)[field]) {
             await supabase
               .from('projects')
               .update({ [field]: inputElement.value })
@@ -278,6 +284,22 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
     }
   };
 
+  const handleViewStudents = (projectId: string) => {
+    const project = projects.find(p => p.id === projectId);
+    if (project && project.students) {
+      setStudents(project.students);
+      setStudentUpdates({});
+      setSelectedGroupId(projectId);
+      setShowStudentModal(true);
+    } else {
+      toast({
+        title: 'No Students',
+        description: 'There are no students associated with this project.',
+        variant: 'default',
+      });
+    }
+  };
+
   const handleSaveProject = async () => {
     if (!editProjectId) return;
 
@@ -289,33 +311,12 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
           .update(editedProject)
           .eq('id', editProjectId);
 
-        if (dynamicColumnValues[editProjectId]) {
-          for (const dynamicValue of dynamicColumnValues[editProjectId]) {
-            const inputId = `dynamic-input-${dynamicValue.column_id}`;
-            const inputElement = document.getElementById(inputId) as HTMLInputElement;
-            if (inputElement) {
-              const newValue = inputElement.value;
-              await supabase
-                .from('dynamic_column_values')
-                .update({ value: newValue })
-                .eq('id', dynamicValue.id);
-            }
-          }
-        }
-
         fetchProjects();
         setEditProjectId(null);
         setEditedProject({});
         toast({
           title: 'Success',
           description: 'Project updated successfully!',
-        });
-      } else {
-        console.error('Edited project is undefined.');
-        toast({
-          title: 'Error',
-          description: 'Failed to update project. Edited project is undefined.',
-          variant: 'destructive',
         });
       }
     } catch (error) {
@@ -379,6 +380,113 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
     setIsDeleteAlertOpen(false);
   };
 
+  const handleDynamicValueChange = async (projectId: string, columnId: string, newValue: string) => {
+    try {
+      const existingValue = dynamicColumnValues[projectId]?.find(
+        v => v.dynamic_columns.id === columnId
+      );
+      
+      if (existingValue) {
+        await supabase
+          .from('dynamic_column_values')
+          .update({ value: newValue })
+          .eq('id', existingValue.id);
+          
+        // Update local state
+        const updatedValues = { ...dynamicColumnValues };
+        updatedValues[projectId] = updatedValues[projectId].map(item => {
+          if (item.id === existingValue.id) {
+            return { ...item, value: newValue };
+          }
+          return item;
+        });
+        setDynamicColumnValues(updatedValues);
+      } else {
+        const result = await addDynamicColumnValue(columnId, projectId, newValue);
+        if (result) {
+          // Refresh dynamic values for this project
+          const values = await getDynamicColumnValues(projectId);
+          setDynamicColumnValues(prev => ({
+            ...prev,
+            [projectId]: values
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Error updating dynamic value:', error);
+      throw error;
+    }
+  };
+
+  const handleAddColumn = async () => {
+    if (!newColumnName.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Column name is required.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    try {
+      await addDynamicColumn(newColumnName, newColumnType);
+      fetchDynamicColumns();
+      setShowAddColumnModal(false);
+      setNewColumnName('');
+      setNewColumnType('text');
+      toast({
+        title: 'Success',
+        description: 'Dynamic column added successfully!',
+      });
+    } catch (error) {
+      console.error('Error adding dynamic column:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to add dynamic column. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleDeleteColumn = (columnId: string) => {
+    setColumnToDelete(columnId);
+    setIsColumnDeleteAlertOpen(true);
+  };
+
+  const confirmDeleteColumn = async () => {
+    if (!columnToDelete) {
+      setIsColumnDeleteAlertOpen(false);
+      return;
+    }
+    
+    try {
+      await deleteDynamicColumn(columnToDelete);
+      fetchDynamicColumns();
+      const updatedValues = { ...dynamicColumnValues };
+      Object.keys(updatedValues).forEach(projectId => {
+        updatedValues[projectId] = updatedValues[projectId].filter(
+          item => item.dynamic_columns.id !== columnToDelete
+        );
+      });
+      setDynamicColumnValues(updatedValues);
+      
+      toast({
+        title: 'Success',
+        description: 'Dynamic column deleted successfully!',
+      });
+    } catch (error) {
+      console.error('Error deleting dynamic column:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete dynamic column. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsColumnDeleteAlertOpen(false);
+      setColumnToDelete(null);
+    }
+  };
+
   const handleUploadFile = async (projectId: string, fieldName: string) => {
     if (!fileForUpload) {
       toast({
@@ -431,12 +539,22 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
     
     try {
       setIsSaving(true);
-      await handleDynamicValueChange(editLinkProjectId, editLinkColumnId, editLinkURL);
+      
+      if (dynamicColumns.some(col => col.id === editLinkColumnId)) {
+        await handleDynamicValueChange(editLinkProjectId, editLinkColumnId, editLinkURL);
+      } else {
+        await supabase
+          .from('projects')
+          .update({ [editLinkColumnId]: editLinkURL })
+          .eq('id', editLinkProjectId);
+      }
       
       setIsLinkEditable(false);
       setEditLinkURL('');
       setEditLinkColumnId('');
       setEditLinkProjectId('');
+      
+      fetchProjects();
       
       toast({
         title: 'Success',
@@ -548,7 +666,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
   };
 
   const generateExcel = () => {
-    // Create worksheet with just the column headers if requested
+    // Create just the column structure for export
     const standardHeaders = {
       'Group No': 'group_no',
       'Title': 'title',
@@ -567,239 +685,25 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
       'Final Evaluation': 'final_evaluation'
     };
     
-    // Create headers including dynamic columns
-    const headers = { ...standardHeaders };
+    // Add dynamic column headers
+    const headers: Record<string, string> = { ...standardHeaders };
     for (const column of dynamicColumns) {
       headers[column.name] = column.id;
     }
     
-    // Export just structure or full data based on preference
-    let data: any[] = [];
-    
-    // Export with data (default)
-    data = projects.map(project => {
-      const row: Record<string, any> = {};
-      
-      // Add standard fields
-      for (const [header, field] of Object.entries(standardHeaders)) {
-        row[header] = project[field] || '';
-      }
-      
-      // Add dynamic columns
-      for (const column of dynamicColumns) {
-        const value = dynamicColumnValues[project.id]?.find(
-          v => v.dynamic_columns?.id === column.id
-        );
-        row[column.name] = value ? value.value : '';
-      }
-      
-      return row;
+    // Create an empty row with just the column headers
+    const headerRow: Record<string, string> = {};
+    Object.keys(headers).forEach(key => {
+      headerRow[key] = '';
     });
     
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(data.length > 0 ? data : [headers]);
+    const ws = XLSX.utils.json_to_sheet([headerRow]);
     XLSX.utils.book_append_sheet(wb, ws, 'Projects');
-    XLSX.writeFile(wb, 'projects.xlsx');
+    XLSX.writeFile(wb, 'projects_template.xlsx');
   };
 
-  const handleShowStudentModal = async (groupId: string) => {
-    setSelectedGroupId(groupId);
-    try {
-      const fetchedStudents = await supabase
-        .from('students')
-        .select('*')
-        .eq('group_id', groupId);
-
-      if (fetchedStudents && fetchedStudents.data) {
-        setStudents(fetchedStudents.data);
-        const initialUpdates = {};
-        fetchedStudents.data.forEach(student => {
-          initialUpdates[student.id] = {};
-        });
-        setStudentUpdates(initialUpdates);
-      } else {
-        setStudents([]);
-        setStudentUpdates({});
-      }
-    } catch (error) {
-      console.error('Error fetching students:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to fetch students. Please try again.',
-        variant: 'destructive',
-      });
-    }
-    setShowStudentModal(true);
-  };
-
-  const handleCloseStudentModal = () => {
-    setShowStudentModal(false);
-    setSelectedGroupId(null);
-    setStudents([]);
-    setStudentUpdates({});
-  };
-
-  const handleStudentInputChange = (studentId: string, field: string, value: any) => {
-    setStudentUpdates(prev => ({
-      ...prev,
-      [studentId]: {
-        ...prev[studentId],
-        [field]: value,
-      },
-    }));
-  };
-
-  const handleSaveStudentChanges = async () => {
-    setIsSaving(true);
-    try {
-      for (const studentId in studentUpdates) {
-        if (Object.keys(studentUpdates[studentId]).length > 0) {
-          await supabase
-            .from('students')
-            .update(studentUpdates[studentId])
-            .eq('id', studentId);
-        }
-      }
-      toast({
-        title: 'Success',
-        description: 'Student details updated successfully!',
-      });
-      handleCloseStudentModal();
-      fetchProjects();
-    } catch (error) {
-      console.error('Error updating student details:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to update student details. Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleAddColumn = async () => {
-    if (!newColumnName) {
-      toast({
-        title: 'Error',
-        description: 'Column name is required.',
-        variant: 'destructive',
-      });
-      return;
-    }
-    
-    try {
-      await addDynamicColumn(newColumnName, newColumnType);
-      fetchDynamicColumns();
-      setShowAddColumnModal(false);
-      setNewColumnName('');
-      setNewColumnType('text');
-      toast({
-        title: 'Success',
-        description: 'Dynamic column added successfully!',
-      });
-    } catch (error) {
-      console.error('Error adding dynamic column:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to add dynamic column. Please try again.',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleDynamicValueChange = async (projectId: string, columnId: string, value: any) => {
-    try {
-      const existingValue = dynamicColumnValues[projectId]?.find(item => 
-        item.dynamic_columns && item.dynamic_columns.id === columnId
-      );
-
-      if (existingValue) {
-        await supabase
-          .from('dynamic_column_values')
-          .update({ value: value })
-          .eq('id', existingValue.id);
-
-        setDynamicColumnValues(prevValues => {
-          const updatedProjectValues = prevValues[projectId]?.map(item => {
-            if (item.dynamic_columns && item.dynamic_columns.id === columnId) {
-              return { ...item, value: value };
-            }
-            return item;
-          }) || [];
-
-          return {
-            ...prevValues,
-            [projectId]: updatedProjectValues,
-          };
-        });
-
-      } else {
-        await addDynamicColumnValue(columnId, projectId, value);
-        const updatedDynamicValues = await getDynamicColumnValues(projectId);
-
-        setDynamicColumnValues(prevValues => ({
-          ...prevValues,
-          [projectId]: updatedDynamicValues,
-        }));
-      }
-    } catch (error) {
-      console.error('Error updating dynamic column value:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to update dynamic column value. Please try again.',
-        variant: 'destructive',
-      });
-      throw error;
-    }
-  };
-
-  const confirmDeleteColumn = () => {
-    if (columnToDelete) {
-      deleteColumn(columnToDelete);
-    }
-    setIsColumnDeleteAlertOpen(false);
-  };
-
-  const cancelDeleteColumn = () => {
-    setIsColumnDeleteAlertOpen(false);
-    setColumnToDelete(null);
-  };
-
-  const handleDeleteColumn = (columnId: string) => {
-    setColumnToDelete(columnId);
-    setIsColumnDeleteAlertOpen(true);
-  };
-
-  const deleteColumn = async (columnId: string) => {
-    try {
-      await deleteDynamicColumn(columnId);
-      fetchDynamicColumns();
-      setDynamicColumnValues(prevValues => {
-        const updatedValues = {};
-        for (const projectId in prevValues) {
-          updatedValues[projectId] = prevValues[projectId].filter(item => 
-            !item.dynamic_columns || item.dynamic_columns.id !== columnId
-          );
-        }
-        return updatedValues;
-      });
-      toast({
-        title: 'Success',
-        description: 'Dynamic column deleted successfully!',
-      });
-    } catch (error) {
-      console.error('Error deleting dynamic column:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to delete dynamic column. Please try again.',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  // Helper function to get value for PDF fields
-  const getPdfFieldDisplay = (projectId: string, field: string, value: string) => {
+  const renderPdfField = (projectId: string, field: string, value: string, label: string) => {
     if (editRowId === projectId) {
       return (
         <div className="flex flex-col space-y-2">
@@ -827,8 +731,17 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
                 }
               }}
             />
-            <Button size="sm" variant="outline">
-              <Link className="h-4 w-4 mr-1" /> Add Link
+            <Button 
+              size="sm" 
+              variant="outline" 
+              onClick={() => {
+                setIsLinkEditable(true);
+                setEditLinkURL(value || '');
+                setEditLinkColumnId(field);
+                setEditLinkProjectId(projectId);
+              }}
+            >
+              <LinkIcon className="h-4 w-4 mr-1" /> Add Link
             </Button>
           </div>
         </div>
@@ -843,87 +756,110 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
         className="text-blue-500 hover:underline flex items-center"
       >
         <FileText className="h-4 w-4 mr-1" />
-        View
+        View {label}
         <ExternalLink className="h-3 w-3 ml-1" />
       </a>
     ) : 'Not available';
   };
 
-  // Helper function to get dynamic column value
-  const getDynamicColumnValue = (projectId: string, columnId: string) => {
-    return dynamicColumnValues[projectId]?.find(
-      v => v.dynamic_columns && v.dynamic_columns.id === columnId
-    )?.value || '';
-  };
-  
-  // Function to render PDF/Link field for dynamic columns
-  const renderDynamicPdfField = (projectId: string, column, value: string) => {
-    if (editRowId === projectId && column.type === 'pdf') {
-      return (
-        <div className="flex flex-col space-y-2">
-          <Input 
-            id={`dynamic-input-${column.id}-${projectId}`}
-            type="text"
-            defaultValue={value || ''}
-          />
-          <div className="flex space-x-2">
-            <Button size="sm" variant="outline" onClick={() => {
-              setFileUrlField(column.id);
-              document.getElementById(`file-upload-${column.id}-${projectId}`)?.click();
-            }}>
-              <File className="h-4 w-4 mr-1" /> Choose File
-            </Button>
-            <input
-              id={`file-upload-${column.id}-${projectId}`}
-              type="file"
-              accept=".pdf"
-              className="hidden"
-              onChange={(e) => {
-                if (e.target.files && e.target.files[0]) {
-                  setFileForUpload(e.target.files[0]);
-                  handleUploadFile(projectId, column.id);
-                }
-              }}
+  const renderDynamicColumnField = (projectId: string, column: any) => {
+    const value = dynamicColumnValues[projectId]?.find(
+      v => v.dynamic_columns?.id === column.id
+    );
+    
+    if (editRowId === projectId) {
+      if (column.type === 'pdf') {
+        return (
+          <div className="flex flex-col space-y-2">
+            <Input 
+              id={`dynamic-input-${column.id}-${projectId}`}
+              type="text"
+              defaultValue={value?.value || ''}
             />
-            <Button 
-              size="sm" 
-              variant="outline" 
-              onClick={() => {
-                setIsLinkEditable(true);
-                setEditLinkURL(value || '');
-                setEditLinkColumnId(column.id);
-                setEditLinkProjectId(projectId);
-              }}
-            >
-              <Link className="h-4 w-4 mr-1" /> Add Link
-            </Button>
+            <div className="flex space-x-2">
+              <Button size="sm" variant="outline" onClick={() => {
+                setFileUrlField(column.id);
+                document.getElementById(`file-upload-${column.id}-${projectId}`)?.click();
+              }}>
+                <File className="h-4 w-4 mr-1" /> Choose File
+              </Button>
+              <input
+                id={`file-upload-${column.id}-${projectId}`}
+                type="file"
+                accept=".pdf"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    setFileForUpload(e.target.files[0]);
+                    handleUploadFile(projectId, column.id);
+                  }
+                }}
+              />
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={() => {
+                  setIsLinkEditable(true);
+                  setEditLinkURL(value?.value || '');
+                  setEditLinkColumnId(column.id);
+                  setEditLinkProjectId(projectId);
+                }}
+              >
+                <LinkIcon className="h-4 w-4 mr-1" /> Add Link
+              </Button>
+            </div>
           </div>
-        </div>
-      );
-    } else if (column.type === 'pdf' && value) {
+        );
+      } else {
+        return (
+          <Input
+            id={`dynamic-input-${column.id}-${projectId}`}
+            type={column.type === 'number' ? 'number' : 'text'}
+            defaultValue={value?.value || ''}
+          />
+        );
+      }
+    }
+    
+    if (column.type === 'pdf' && value?.value) {
       return (
         <a 
-          href={value} 
+          href={value.value} 
           target="_blank" 
           rel="noreferrer" 
           className="text-blue-500 hover:underline flex items-center"
         >
           <FileText className="h-4 w-4 mr-1" />
-          View
+          View Document
           <ExternalLink className="h-3 w-3 ml-1" />
         </a>
       );
-    } else if (editRowId === projectId) {
-      return (
-        <Input
-          id={`dynamic-input-${column.id}-${projectId}`}
-          type={column.type === 'number' ? 'number' : 'text'}
-          defaultValue={value || ''}
-        />
-      );
     }
     
-    return value || '';
+    return value?.value || '';
+  };
+
+  // Function to render student data
+  const renderStudentsList = (project: Project) => {
+    const studentsList = project.students || [];
+    if (studentsList.length === 0) {
+      return <span className="text-gray-500 italic">No students</span>;
+    }
+
+    return (
+      <div className="flex items-center">
+        <span>{studentsList.length} student(s)</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => handleViewStudents(project.id)}
+          className="ml-1"
+        >
+          <Users className="h-4 w-4 mr-1" />
+          View
+        </Button>
+      </div>
+    );
   };
 
   return (
@@ -941,7 +877,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
           </Button>
           <Button variant="outline" size="sm" onClick={generateExcel}>
             <Download className="mr-2 h-4 w-4" />
-            Generate Excel
+            Export Template
           </Button>
         </div>
         <div>
@@ -971,6 +907,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
               <TableHead>Year</TableHead>
               <TableHead>Semester</TableHead>
               <TableHead>Faculty Coordinator</TableHead>
+              <TableHead>Students</TableHead>
               <TableHead>Progress Form</TableHead>
               <TableHead>Presentation</TableHead>
               <TableHead>Report</TableHead>
@@ -994,9 +931,15 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {projects.map((project) => (
-              <React.Fragment key={project.id}>
-                <TableRow className="border-b-2 border-gray-300">
+            {projects.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={18 + dynamicColumns.length} className="text-center py-8">
+                  No projects found. Try adjusting your filters or adding new projects.
+                </TableCell>
+              </TableRow>
+            ) : (
+              projects.map((project) => (
+                <TableRow key={project.id} className="border-b border-gray-100 hover:bg-gray-50">
                   <TableCell className="w-[50px]">
                     <Input
                       type="checkbox"
@@ -1113,54 +1056,56 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
                     )}
                   </TableCell>
                   <TableCell>
-                    {getPdfFieldDisplay(project.id, 'progress_form_url', project.progress_form_url)}
+                    {renderStudentsList(project)}
                   </TableCell>
                   <TableCell>
-                    {getPdfFieldDisplay(project.id, 'presentation_url', project.presentation_url)}
+                    {renderPdfField(project.id, 'progress_form_url', project.progress_form_url, 'Progress Form')}
                   </TableCell>
                   <TableCell>
-                    {getPdfFieldDisplay(project.id, 'report_url', project.report_url)}
+                    {renderPdfField(project.id, 'presentation_url', project.presentation_url, 'Presentation')}
+                  </TableCell>
+                  <TableCell>
+                    {renderPdfField(project.id, 'report_url', project.report_url, 'Report')}
                   </TableCell>
                   <TableCell>
                     {editRowId === project.id ? (
                       <Input
-                        id={`initial_evaluation-${project.id}`}
                         type="text"
+                        name="initial_evaluation"
+                        id={`initial_evaluation-${project.id}`}
                         defaultValue={project.initial_evaluation || ''}
                       />
                     ) : (
-                      project.initial_evaluation || ''
+                      project.initial_evaluation || 'Not evaluated'
                     )}
                   </TableCell>
                   <TableCell>
                     {editRowId === project.id ? (
                       <Input
-                        id={`progress_evaluation-${project.id}`}
                         type="text"
+                        name="progress_evaluation"
+                        id={`progress_evaluation-${project.id}`}
                         defaultValue={project.progress_evaluation || ''}
                       />
                     ) : (
-                      project.progress_evaluation || ''
+                      project.progress_evaluation || 'Not evaluated'
                     )}
                   </TableCell>
                   <TableCell>
                     {editRowId === project.id ? (
                       <Input
-                        id={`final_evaluation-${project.id}`}
                         type="text"
+                        name="final_evaluation"
+                        id={`final_evaluation-${project.id}`}
                         defaultValue={project.final_evaluation || ''}
                       />
                     ) : (
-                      project.final_evaluation || ''
+                      project.final_evaluation || 'Not evaluated'
                     )}
                   </TableCell>
                   {dynamicColumns.map((column) => (
                     <TableCell key={`${project.id}-${column.id}`}>
-                      {renderDynamicPdfField(
-                        project.id, 
-                        column,
-                        getDynamicColumnValue(project.id, column.id)
-                      )}
+                      {renderDynamicColumnField(project.id, column)}
                     </TableCell>
                   ))}
                   <TableCell className="text-right">
@@ -1192,47 +1137,19 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
                         </Button>
                       </div>
                     ) : (
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => handleShowStudentModal(project.id)}
-                        >
-                          View Students
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleEditRow(project)}
-                        >
-                          <Edit className="mr-2 h-4 w-4" />
-                          Edit Row
-                        </Button>
-                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleEditRow(project)}
+                      >
+                        <Edit className="mr-2 h-4 w-4" />
+                        Edit Row
+                      </Button>
                     )}
                   </TableCell>
                 </TableRow>
-                {project.students && project.students.length > 0 && (
-                  <TableRow className="bg-gray-50">
-                    <TableCell colSpan={16 + dynamicColumns.length + 1}>
-                      <div className="p-2">
-                        <h4 className="font-medium mb-2">Students:</h4>
-                        <div className="grid grid-cols-4 gap-4">
-                          {project.students.map((student) => (
-                            <div key={student.id} className="border p-2 rounded">
-                              <div><strong>Name:</strong> {student.name}</div>
-                              <div><strong>Roll No:</strong> {student.roll_no}</div>
-                              <div><strong>Email:</strong> {student.email || 'N/A'}</div>
-                              <div><strong>Program:</strong> {student.program || 'N/A'}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </React.Fragment>
-            ))}
+              ))
+            )}
           </TableBody>
         </Table>
       </div>
@@ -1260,225 +1177,47 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog open={editProjectId !== null} onOpenChange={() => setEditProjectId(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Project</DialogTitle>
-            <DialogDescription>
-              Make changes to the project details here. Click save when you're
-              done.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="group_no" className="text-right">
-                Group No
-              </label>
-              <Input
-                type="text"
-                id="group_no"
-                name="group_no"
-                value={editedProject?.group_no || ''}
-                onChange={handleInputChange}
-                className="col-span-3"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="title" className="text-right">
-                Title
-              </label>
-              <Input
-                type="text"
-                id="title"
-                name="title"
-                value={editedProject?.title || ''}
-                onChange={handleInputChange}
-                className="col-span-3"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="domain" className="text-right">
-                Domain
-              </label>
-              <Input
-                type="text"
-                id="domain"
-                name="domain"
-                value={editedProject?.domain || ''}
-                onChange={handleInputChange}
-                className="col-span-3"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="faculty_mentor" className="text-right">
-                Faculty Mentor
-              </label>
-              <Input
-                type="text"
-                id="faculty_mentor"
-                name="faculty_mentor"
-                value={editedProject?.faculty_mentor || ''}
-                onChange={handleInputChange}
-                className="col-span-3"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="industry_mentor" className="text-right">
-                Industry Mentor
-              </label>
-              <Input
-                type="text"
-                id="industry_mentor"
-                name="industry_mentor"
-                value={editedProject?.industry_mentor || ''}
-                onChange={handleInputChange}
-                className="col-span-3"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="session" className="text-right">
-                Session
-              </label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant={'outline'}
-                    className={
-                      'w-[280px] justify-start text-left font-normal' +
-                      (editedProject?.session ? ' text-foreground' : ' text-muted-foreground')
-                    }
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {editedProject?.session ? (
-                      format(new Date(editedProject.session), 'yyyy-MM-dd')
-                    ) : (
-                      <span>Pick a date</span>
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="center">
-                  <Calendar
-                    mode="single"
-                    selected={editedProject?.session ? new Date(editedProject.session) : undefined}
-                    onSelect={handleDateChange}
-                    disabled={(date) =>
-                      date > new Date() || date < new Date('2020-01-01')
-                    }
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="year" className="text-right">
-                Year
-              </label>
-              <Input
-                type="text"
-                id="year"
-                name="year"
-                value={editedProject?.year || ''}
-                onChange={handleInputChange}
-                className="col-span-3"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="semester" className="text-right">
-                Semester
-              </label>
-              <Input
-                type="text"
-                id="semester"
-                name="semester"
-                value={editedProject?.semester || ''}
-                onChange={handleInputChange}
-                className="col-span-3"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="faculty_coordinator" className="text-right">
-                Faculty Coordinator
-              </label>
-              <Input
-                type="text"
-                id="faculty_coordinator"
-                name="faculty_coordinator"
-                value={editedProject?.faculty_coordinator || ''}
-                onChange={handleInputChange}
-                className="col-span-3"
-              />
-            </div>
-          </div>
-          <div className="flex justify-end">
-            <Button type="submit" onClick={handleSaveProject} disabled={isSaving}>
-              {isSaving ? 'Saving...' : 'Save changes'}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={showStudentModal} onOpenChange={setShowStudentModal}>
-        <DialogContent>
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
-            <DialogTitle>Student Details</DialogTitle>
+            <DialogTitle>Students for Group {projects.find(p => p.id === selectedGroupId)?.group_no}</DialogTitle>
             <DialogDescription>
-              View and edit student details for the selected group.
+              Here are the students associated with this project.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            {students.map((student) => (
-              <div key={student.id} className="grid grid-cols-4 items-center gap-4">
-                <label htmlFor={`roll_no_${student.id}`} className="text-right">
-                  Roll No
-                </label>
-                <Input
-                  type="text"
-                  id={`roll_no_${student.id}`}
-                  defaultValue={student.roll_no}
-                  onChange={(e) => handleStudentInputChange(student.id, 'roll_no', e.target.value)}
-                  className="col-span-3"
-                />
-                <label htmlFor={`name_${student.id}`} className="text-right">
-                  Name
-                </label>
-                <Input
-                  type="text"
-                  id={`name_${student.id}`}
-                  defaultValue={student.name}
-                  onChange={(e) => handleStudentInputChange(student.id, 'name', e.target.value)}
-                  className="col-span-3"
-                />
-                <label htmlFor={`email_${student.id}`} className="text-right">
-                  Email
-                </label>
-                <Input
-                  type="email"
-                  id={`email_${student.id}`}
-                  defaultValue={student.email}
-                  onChange={(e) => handleStudentInputChange(student.id, 'email', e.target.value)}
-                  className="col-span-3"
-                />
-                <label htmlFor={`program_${student.id}`} className="text-right">
-                  Program
-                </label>
-                <Input
-                  type="text"
-                  id={`program_${student.id}`}
-                  defaultValue={student.program}
-                  onChange={(e) => handleStudentInputChange(student.id, 'program', e.target.value)}
-                  className="col-span-3"
-                />
-              </div>
-            ))}
+          <div className="mt-4 border rounded-md overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Roll No</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Program</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {students.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center py-4">
+                      No students found for this project.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  students.map((student) => (
+                    <TableRow key={student.id} className="hover:bg-gray-50">
+                      <TableCell>{student.roll_no}</TableCell>
+                      <TableCell>{student.name}</TableCell>
+                      <TableCell>{student.email}</TableCell>
+                      <TableCell>{student.program}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
           </div>
-          <div className="flex justify-end">
-            <Button type="button" onClick={handleSaveStudentChanges} disabled={isSaving}>
-              {isSaving ? 'Saving...' : 'Save changes'}
-            </Button>
-            <Button type="button" variant="ghost" onClick={handleCloseStudentModal}>
-              Cancel
-            </Button>
-          </div>
+          <DialogFooter>
+            <Button onClick={() => setShowStudentModal(false)}>Close</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1487,7 +1226,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
           <DialogHeader>
             <DialogTitle>Add Dynamic Column</DialogTitle>
             <DialogDescription>
-              Add a new column to the project table.
+              Add a new column to track additional project information.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -1536,7 +1275,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={cancelDeleteColumn}>
+            <AlertDialogCancel onClick={() => setIsColumnDeleteAlertOpen(false)}>
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction onClick={confirmDeleteColumn}>

@@ -231,10 +231,13 @@ export type Database = {
           domain: string | null
           faculty_coordinator: string | null
           faculty_mentor: string | null
+          final_evaluation: string | null
           group_no: string
           id: string
           industry_mentor: string | null
+          initial_evaluation: string | null
           presentation_url: string | null
+          progress_evaluation: string | null
           progress_form_url: string | null
           report_url: string | null
           semester: string | null
@@ -248,10 +251,13 @@ export type Database = {
           domain?: string | null
           faculty_coordinator?: string | null
           faculty_mentor?: string | null
+          final_evaluation?: string | null
           group_no: string
           id?: string
           industry_mentor?: string | null
+          initial_evaluation?: string | null
           presentation_url?: string | null
+          progress_evaluation?: string | null
           progress_form_url?: string | null
           report_url?: string | null
           semester?: string | null
@@ -265,10 +271,13 @@ export type Database = {
           domain?: string | null
           faculty_coordinator?: string | null
           faculty_mentor?: string | null
+          final_evaluation?: string | null
           group_no?: string
           id?: string
           industry_mentor?: string | null
+          initial_evaluation?: string | null
           presentation_url?: string | null
+          progress_evaluation?: string | null
           progress_form_url?: string | null
           report_url?: string | null
           semester?: string | null
@@ -322,7 +331,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      add_column_if_not_exists: {
+        Args: {
+          _table_name: string
+          _column_name: string
+          _column_type: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

@@ -81,17 +81,17 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [perPage, setPerPage] = useState(10);
-  const [dynamicColumns, setDynamicColumns] = useState([]);
+  const [dynamicColumns, setDynamicColumns] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [showAddColumnModal, setShowAddColumnModal] = useState(false);
   const [newColumnName, setNewColumnName] = useState('');
   const [newColumnType, setNewColumnType] = useState('text');
-  const [editInternshipId, setEditInternshipId] = useState(null);
-  const [editedInternship, setEditedInternship] = useState({});
-  const [dynamicColumnValues, setDynamicColumnValues] = useState({});
+  const [editInternshipId, setEditInternshipId] = useState<string | null>(null);
+  const [editedInternship, setEditedInternship] = useState<Partial<Internship>>({});
+  const [dynamicColumnValues, setDynamicColumnValues] = useState<Record<string, any[]>>({});
   const [isColumnDeleteAlertOpen, setIsColumnDeleteAlertOpen] = useState(false);
-  const [columnToDelete, setColumnToDelete] = useState(null);
+  const [columnToDelete, setColumnToDelete] = useState<string | null>(null);
   const [editRowId, setEditRowId] = useState<string | null>(null);
   const [fileForUpload, setFileForUpload] = useState<File | null>(null);
   const [fileUrlField, setFileUrlField] = useState('');
@@ -139,8 +139,9 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
         query = query.ilike('faculty_coordinator', `%${filters.faculty_coordinator}%`);
       }
       
-      // Get count of total results
-      const { count, error: countError } = await query.count();
+      // Get count for pagination
+      const countQuery = query.clone();
+      const { count, error: countError } = await countQuery.count();
       
       if (countError) {
         throw countError;
@@ -159,10 +160,10 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       }
       
       setInternships(data || []);
-      setTotalPages(Math.ceil(count / perPage));
+      setTotalPages(Math.ceil((count as number) / perPage));
       
       // Fetch dynamic column values for each internship
-      const values = {};
+      const values: Record<string, any[]> = {};
       for (const internship of data || []) {
         const dynamicValues = await getInternshipDynamicColumnValues(internship.id);
         values[internship.id] = dynamicValues;
@@ -214,7 +215,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
 
   const handleEditRow = (internship: Internship) => {
     setEditRowId(internship.id);
-    setEditedInternship(internship);
+    setEditedInternship({ ...internship });
   };
 
   const handleInputChange = (
@@ -260,7 +261,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
       for (const field of pdfFields) {
         const inputId = `${field}-${editRowId}`;
         const inputElement = document.getElementById(inputId) as HTMLInputElement;
-        if (inputElement && inputElement.value !== editedInternship[field]) {
+        if (inputElement && inputElement.value !== (editedInternship as any)[field]) {
           await supabase
             .from('internships')
             .update({ [field]: inputElement.value })
@@ -324,19 +325,17 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     setIsSaving(true);
     try {
       for (const internshipId of selectedInternships) {
-        const { error: valuesError } = await supabase
+        // First delete any dynamic column values associated with this internship
+        await supabase
           .from('internship_dynamic_column_values')
           .delete()
           .eq('internship_id', internshipId);
         
-        if (valuesError) throw valuesError;
-        
-        const { error } = await supabase
+        // Then delete the internship
+        await supabase
           .from('internships')
           .delete()
           .eq('id', internshipId);
-        
-        if (error) throw error;
       }
       
       fetchInternships();
@@ -666,40 +665,21 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     };
     
     // Create headers including dynamic columns
-    const headers = { ...standardHeaders };
+    const headers: Record<string, string> = { ...standardHeaders };
     for (const column of dynamicColumns) {
       headers[column.name] = column.id;
     }
     
-    // Export just structure or full data based on preference
-    let data: any[] = [];
-    
-    // Export with data (default)
-    data = internships.map(internship => {
-      const row: Record<string, any> = {};
-      
-      // Add standard fields
-      for (const [header, field] of Object.entries(standardHeaders)) {
-        if (field === 'duration') {
-          row[header] = calculateInternshipDuration(internship.starting_date, internship.ending_date);
-        } else {
-          row[header] = internship[field] || '';
-        }
-      }
-      
-      // Add dynamic columns
-      for (const column of dynamicColumns) {
-        const value = getDynamicColumnValueForInternship(internship.id, column.id);
-        row[column.name] = value ? value.value : '';
-      }
-      
-      return row;
+    // Export just structure without data
+    const headerRow: Record<string, string> = {};
+    Object.keys(headers).forEach(key => {
+      headerRow[key] = '';
     });
     
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(data.length > 0 ? data : [headers]);
+    const ws = XLSX.utils.json_to_sheet([headerRow]);
     XLSX.utils.book_append_sheet(wb, ws, 'Internships');
-    XLSX.writeFile(wb, 'internships.xlsx');
+    XLSX.writeFile(wb, 'internships_template.xlsx');
   };
 
   const handleUploadFile = async (internshipId: string, fieldName: string) => {
@@ -853,7 +833,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
   };
 
   // Function to render PDF/Link field for dynamic columns
-  const renderDynamicPdfField = (internshipId: string, column, value) => {
+  const renderDynamicPdfField = (internshipId: string, column: any, value: any) => {
     if (editRowId === internshipId && column.type === 'pdf') {
       return (
         <div className="flex flex-col space-y-2">
@@ -933,7 +913,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
           </Button>
           <Button variant="outline" size="sm" onClick={generateExcel}>
             <Download className="mr-2 h-4 w-4" />
-            Generate Excel
+            Export Template
           </Button>
         </div>
         <div>
