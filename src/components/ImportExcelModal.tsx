@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -89,12 +90,13 @@ const ImportExcelModal: React.FC<ImportExcelModalProps> = ({ isOpen, onClose }) 
           const groupedData: Record<string, any[]> = {};
           
           for (const row of jsonData) {
-            const groupNo = row['Group No'] || '';
-            
-            if (!groupNo) {
+            // Check for valid row data
+            if (!row['Group No']) {
               console.error('Row missing Group No:', row);
               continue;
             }
+            
+            const groupNo = String(row['Group No']).trim();
             
             if (!groupedData[groupNo]) {
               groupedData[groupNo] = [];
@@ -106,6 +108,8 @@ const ImportExcelModal: React.FC<ImportExcelModalProps> = ({ isOpen, onClose }) 
           // Import each group
           let successCount = 0;
           let errorCount = 0;
+          
+          console.log('Grouped data:', groupedData);
           
           for (const [groupNo, rows] of Object.entries(groupedData)) {
             try {
@@ -120,33 +124,49 @@ const ImportExcelModal: React.FC<ImportExcelModalProps> = ({ isOpen, onClose }) 
               
               const projectData = {
                 group_no: groupNo,
-                title: firstRow['Title'] || '',
-                domain: firstRow['Domain'] || '',
-                faculty_mentor: firstRow['Faculty Mentor'] || '',
-                industry_mentor: firstRow['Industry Mentor'] || '',
+                title: String(firstRow['Title'] || ''),
+                domain: String(firstRow['Domain'] || ''),
+                faculty_mentor: String(firstRow['Faculty Mentor'] || ''),
+                industry_mentor: String(firstRow['Industry Mentor'] || ''),
                 session: session,
                 year: year,
                 semester: semester,
                 faculty_coordinator: facultyCoordinator,
-                progress_form_url: firstRow['Progress Form'] || '',
-                presentation_url: firstRow['Presentation'] || '',
-                report_url: firstRow['Report'] || '',
+                progress_form_url: String(firstRow['Progress Form'] || ''),
+                presentation_url: String(firstRow['Presentation'] || ''),
+                report_url: String(firstRow['Report'] || ''),
               };
               
-              // Extract student data
-              const students = rows.map(row => ({
-                roll_no: row['Roll No'] || '',
-                name: row['Name'] || '',
-                email: row['Email'] || '',
-                program: row['Program'] || '',
-              }));
+              // Extract student data from each row - ensure we're properly catching all student fields
+              const students = rows.map(row => {
+                // Check for the different possible column names and convert to strings
+                const rollNo = String(row['Roll No'] || row['Student Roll No'] || row['student1_roll_no'] || row['student2_roll_no'] || row['student3_roll_no'] || row['student4_roll_no'] || '').trim();
+                const name = String(row['Name'] || row['Student Name'] || row['student1_name'] || row['student2_name'] || row['student3_name'] || row['student4_name'] || '').trim();
+                const email = String(row['Email'] || row['Student Email'] || row['student1_email'] || row['student2_email'] || row['student3_email'] || row['student4_email'] || '').trim();
+                const program = String(row['Program'] || row['Student Program'] || row['student1_program'] || row['student2_program'] || row['student3_program'] || row['student4_program'] || '').trim();
+                
+                console.log('Processing student:', { rollNo, name, email, program });
+                
+                return {
+                  roll_no: rollNo,
+                  name: name,
+                  email: email,
+                  program: program,
+                };
+              });
               
-              // Add the project
+              console.log('Saving project with student data:', {
+                projectData,
+                students
+              });
+              
+              // Add the project with student data
               const result = await addProject(projectData, students);
               
               if (result) {
                 successCount++;
               } else {
+                console.error('Failed to add project:', { projectData, students });
                 errorCount++;
               }
             } catch (error) {
