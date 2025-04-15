@@ -682,7 +682,24 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
       'Report': 'report_url',
       'Initial Evaluation': 'initial_evaluation',
       'Progress Evaluation': 'progress_evaluation',
-      'Final Evaluation': 'final_evaluation'
+      'Final Evaluation': 'final_evaluation',
+      // Add student-related columns
+      'Student 1 Roll No': 'student1_roll_no',
+      'Student 1 Name': 'student1_name',
+      'Student 1 Email': 'student1_email',
+      'Student 1 Program': 'student1_program',
+      'Student 2 Roll No': 'student2_roll_no',
+      'Student 2 Name': 'student2_name',
+      'Student 2 Email': 'student2_email',
+      'Student 2 Program': 'student2_program',
+      'Student 3 Roll No': 'student3_roll_no',
+      'Student 3 Name': 'student3_name',
+      'Student 3 Email': 'student3_email',
+      'Student 3 Program': 'student3_program',
+      'Student 4 Roll No': 'student4_roll_no',
+      'Student 4 Name': 'student4_name',
+      'Student 4 Email': 'student4_email',
+      'Student 4 Program': 'student4_program',
     };
     
     // Add dynamic column headers
