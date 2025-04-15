@@ -70,7 +70,7 @@ const ImportExcelInternshipModal: React.FC<ImportExcelInternshipModalProps> = ({
           const ws = workbook.Sheets[wsname];
           
           // Convert array of arrays to array of objects
-          const jsonData = XLSX.utils.sheet_to_json(ws);
+          const jsonData = XLSX.utils.sheet_to_json(ws, { defval: '' });
           console.log("Excel data parsed:", jsonData);
 
           if (jsonData.length === 0) {
