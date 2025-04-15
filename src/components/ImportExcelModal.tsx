@@ -4,11 +4,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { addProject } from '@/lib/supabase';
-import { useToast } from '@/components/ui/use-toast';
-import * as XLSX from 'xlsx';
 import { Loader2, Upload } from 'lucide-react';
+import ImportFilters from './excel-import/ImportFilters';
+import { useExcelImport } from '@/hooks/useExcelImport';
 
 interface ImportExcelModalProps {
   isOpen: boolean;
@@ -16,207 +14,34 @@ interface ImportExcelModalProps {
 }
 
 const ImportExcelModal: React.FC<ImportExcelModalProps> = ({ isOpen, onClose }) => {
-  const [file, setFile] = useState<File | null>(null);
-  const [session, setSession] = useState('');
-  const [year, setYear] = useState('');
-  const [semester, setSemester] = useState('');
-  const [facultyCoordinator, setFacultyCoordinator] = useState('');
   const [minStudents, setMinStudents] = useState(1);
   const [maxStudents, setMaxStudents] = useState(4);
-  const [isImporting, setIsImporting] = useState(false);
-  const [previewData, setPreviewData] = useState<any[] | null>(null);
-  const { toast } = useToast();
-  
-  // Faculty coordinators list
-  const facultyCoordinators = [
-    'dr.pankaj', 'dr.anshu', 'dr.meenu', 'dr.swati'
-  ];
-  
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      setFile(selectedFile);
-      
-      // Preview Excel data
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-        if (evt.target?.result) {
-          const data = evt.target.result;
-          const workbook = XLSX.read(data, { type: 'binary' });
-          const firstSheet = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[firstSheet];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet);
-          setPreviewData(jsonData.slice(0, 5)); // Preview first 5 rows
-        }
-      };
-      reader.readAsBinaryString(selectedFile);
+  const [facultyData, setFacultyData] = useState<any>(null);
+
+  React.useEffect(() => {
+    const storedFaculty = sessionStorage.getItem('faculty');
+    if (storedFaculty) {
+      setFacultyData(JSON.parse(storedFaculty));
     }
-  };
-  
-  const handleImport = async () => {
-    if (!file) {
-      toast({
-        title: 'No File Selected',
-        description: 'Please select an Excel file to import.',
-        variant: 'destructive',
-      });
-      return;
-    }
-    
-    if (!session || !year || !semester || !facultyCoordinator) {
-      toast({
-        title: 'Missing Filters',
-        description: 'Please fill in all filter fields.',
-        variant: 'destructive',
-      });
-      return;
-    }
-    
-    setIsImporting(true);
-    
-    try {
-      const reader = new FileReader();
-      
-      reader.onload = async (evt) => {
-        if (evt.target?.result) {
-          const data = evt.target.result;
-          const workbook = XLSX.read(data, { type: 'binary' });
-          const firstSheet = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[firstSheet];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
-          
-          // Process the data
-          // Group students by group number
-          const groupedData: Record<string, any[]> = {};
-          
-          for (const row of jsonData) {
-            // Check for valid row data
-            if (!row['Group No']) {
-              console.error('Row missing Group No:', row);
-              continue;
-            }
-            
-            const groupNo = String(row['Group No']).trim();
-            
-            if (!groupedData[groupNo]) {
-              groupedData[groupNo] = [];
-            }
-            
-            groupedData[groupNo].push(row);
-          }
-          
-          // Import each group
-          let successCount = 0;
-          let errorCount = 0;
-          
-          console.log('Grouped data:', groupedData);
-          
-          for (const [groupNo, rows] of Object.entries(groupedData)) {
-            try {
-              if (rows.length < minStudents || rows.length > maxStudents) {
-                console.warn(`Group ${groupNo} has ${rows.length} students, outside the range of ${minStudents}-${maxStudents}.`);
-                errorCount++;
-                continue;
-              }
-              
-              // Extract group data from first row
-              const firstRow = rows[0];
-              
-              const projectData = {
-                group_no: groupNo,
-                title: String(firstRow['Title'] || ''),
-                domain: String(firstRow['Domain'] || ''),
-                faculty_mentor: String(firstRow['Faculty Mentor'] || ''),
-                industry_mentor: String(firstRow['Industry Mentor'] || ''),
-                session: session,
-                year: year,
-                semester: semester,
-                faculty_coordinator: facultyCoordinator,
-                progress_form_url: String(firstRow['Progress Form'] || ''),
-                presentation_url: String(firstRow['Presentation'] || ''),
-                report_url: String(firstRow['Report'] || ''),
-              };
-              
-              // Extract student data from each row - ensure we're properly catching all student fields
-              const students = rows.map(row => {
-                // Check for the different possible column names and convert to strings
-                const rollNo = String(row['Roll No'] || row['Student Roll No'] || row['student1_roll_no'] || row['student2_roll_no'] || row['student3_roll_no'] || row['student4_roll_no'] || '').trim();
-                const name = String(row['Name'] || row['Student Name'] || row['student1_name'] || row['student2_name'] || row['student3_name'] || row['student4_name'] || '').trim();
-                const email = String(row['Email'] || row['Student Email'] || row['student1_email'] || row['student2_email'] || row['student3_email'] || row['student4_email'] || '').trim();
-                const program = String(row['Program'] || row['Student Program'] || row['student1_program'] || row['student2_program'] || row['student3_program'] || row['student4_program'] || '').trim();
-                
-                console.log('Processing student:', { rollNo, name, email, program });
-                
-                return {
-                  roll_no: rollNo,
-                  name: name,
-                  email: email,
-                  program: program,
-                };
-              });
-              
-              console.log('Saving project with student data:', {
-                projectData,
-                students
-              });
-              
-              // Add the project with student data
-              const result = await addProject(projectData, students);
-              
-              if (result) {
-                successCount++;
-              } else {
-                console.error('Failed to add project:', { projectData, students });
-                errorCount++;
-              }
-            } catch (error) {
-              console.error(`Error importing group ${groupNo}:`, error);
-              errorCount++;
-            }
-          }
-          
-          // Show results
-          if (successCount > 0) {
-            toast({
-              title: 'Import Successful',
-              description: `Successfully imported ${successCount} groups.${errorCount > 0 ? ` Failed to import ${errorCount} groups.` : ''}`,
-            });
-            onClose();
-          } else {
-            toast({
-              title: 'Import Failed',
-              description: 'Failed to import any groups. Please check the Excel format and try again.',
-              variant: 'destructive',
-            });
-          }
-        }
-      };
-      
-      reader.readAsBinaryString(file);
-    } catch (error) {
-      console.error('Import error:', error);
-      toast({
-        title: 'Import Error',
-        description: 'An error occurred during import. Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsImporting(false);
-    }
-  };
-  
+  }, []);
+
+  const {
+    file,
+    isImporting,
+    previewData,
+    handleFileChange,
+    handleImport,
+  } = useExcelImport({
+    facultyCoordinator: facultyData?.name || '',
+    onClose,
+  });
+
   const handleClose = () => {
-    setFile(null);
-    setPreviewData(null);
-    setSession('');
-    setYear('');
-    setSemester('');
-    setFacultyCoordinator('');
     setMinStudents(1);
     setMaxStudents(4);
     onClose();
   };
-  
+
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-2xl">
@@ -238,73 +63,12 @@ const ImportExcelModal: React.FC<ImportExcelModalProps> = ({ isOpen, onClose }) 
             </p>
           </div>
           
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="min-students">Minimum Students per Group</Label>
-              <Input
-                id="min-students"
-                type="number"
-                min={1}
-                max={10}
-                value={minStudents}
-                onChange={(e) => setMinStudents(Number(e.target.value))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="max-students">Maximum Students per Group</Label>
-              <Input
-                id="max-students"
-                type="number"
-                min={minStudents}
-                max={10}
-                value={maxStudents}
-                onChange={(e) => setMaxStudents(Number(e.target.value))}
-              />
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="import-session">Session</Label>
-              <Input
-                id="import-session"
-                value={session}
-                onChange={(e) => setSession(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="import-year">Year</Label>
-              <Input
-                id="import-year"
-                value={year}
-                onChange={(e) => setYear(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="import-semester">Semester</Label>
-              <Input
-                id="import-semester"
-                value={semester}
-                onChange={(e) => setSemester(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="import-faculty-coordinator">Faculty Coordinator</Label>
-              <Select value={facultyCoordinator} onValueChange={setFacultyCoordinator}>
-                <SelectTrigger id="import-faculty-coordinator">
-                  <SelectValue placeholder="Select coordinator" />
-                </SelectTrigger>
-                <SelectContent>
-                  {facultyCoordinators.map((fc) => (
-                    <SelectItem key={fc} value={fc}>{fc}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+          <ImportFilters
+            minStudents={minStudents}
+            maxStudents={maxStudents}
+            onMinStudentsChange={setMinStudents}
+            onMaxStudentsChange={setMaxStudents}
+          />
           
           {previewData && previewData.length > 0 && (
             <div className="space-y-2">
@@ -321,7 +85,7 @@ const ImportExcelModal: React.FC<ImportExcelModalProps> = ({ isOpen, onClose }) 
             </Button>
             <Button 
               onClick={handleImport} 
-              disabled={isImporting || !file || !session || !year || !semester || !facultyCoordinator}
+              disabled={isImporting || !file || !facultyData?.name}
             >
               {isImporting ? (
                 <>
