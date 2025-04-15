@@ -9,7 +9,7 @@ import AddProjectModal from '@/components/AddProjectModal';
 import ImportExcelModal from '@/components/ImportExcelModal';
 import { Faculty, setupDatabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
-import { FilePlus2, Download, FileText } from 'lucide-react';
+import { FilePlus2, Download } from 'lucide-react';
 
 const ProjectPortal = () => {
   const navigate = useNavigate();
@@ -65,6 +65,7 @@ const ProjectPortal = () => {
     setFilters(newFilters);
   };
 
+  // If loading, show loading indicator
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -73,6 +74,7 @@ const ProjectPortal = () => {
     );
   }
 
+  // If faculty data not found, show session expired message
   if (!faculty) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -85,6 +87,7 @@ const ProjectPortal = () => {
     );
   }
 
+  // Main content
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col">
       <Navbar faculty={faculty} />
