@@ -113,20 +113,20 @@ const ImportExcelInternshipModal: React.FC<ImportExcelInternshipModalProps> = ({
             
             // Map for common column name variations
             const columnMappings: Record<string, string[]> = {
-              'roll_no': ['roll_no', 'Roll No', 'RollNo', 'Roll Number', 'Student Roll No'],
-              'name': ['name', 'Name', 'Student Name', 'Full Name'],
-              'email': ['email', 'Email', 'Student Email', 'Email Address'],
-              'phone_no': ['phone_no', 'Phone No', 'Phone', 'Contact', 'Mobile'],
+              'roll_no': ['roll_no', 'Roll No', 'RollNo', 'Roll Number', 'Student Roll No', 'Roll_No'],
+              'name': ['name', 'Name', 'Student Name', 'Full Name', 'Student_Name'],
+              'email': ['email', 'Email', 'Student Email', 'Email Address', 'Student_Email'],
+              'phone_no': ['phone_no', 'Phone No', 'Phone', 'Contact', 'Mobile', 'Phone_No'],
               'domain': ['domain', 'Domain', 'Field', 'Area'],
               'session': ['session', 'Session'],
               'year': ['year', 'Year'],
               'semester': ['semester', 'Semester'],
               'program': ['program', 'Program', 'Course'],
-              'organization_name': ['organization_name', 'Organization', 'Organization Name', 'Company', 'Company Name'],
-              'starting_date': ['starting_date', 'Starting Date', 'Start Date', 'From Date'],
-              'ending_date': ['ending_date', 'Ending Date', 'End Date', 'To Date'],
+              'organization_name': ['organization_name', 'Organization', 'Organization Name', 'Company', 'Company Name', 'Organization_Name'],
+              'starting_date': ['starting_date', 'Starting Date', 'Start Date', 'From Date', 'Starting_Date'],
+              'ending_date': ['ending_date', 'Ending Date', 'End Date', 'To Date', 'Ending_Date'],
               'position': ['position', 'Position', 'Role', 'Designation'],
-              'offer_letter_url': ['offer_letter_url', 'Offer Letter', 'Offer'],
+              'offer_letter_url': ['offer_letter_url', 'Offer Letter', 'Offer', 'Offer_Letter'],
               'noc_url': ['noc_url', 'NOC', 'No Objection Certificate'],
               'ppo_url': ['ppo_url', 'PPO', 'Pre Placement Offer'],
             };

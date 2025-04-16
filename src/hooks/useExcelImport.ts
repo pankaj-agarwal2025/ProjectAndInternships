@@ -25,8 +25,8 @@ export const useExcelImport = ({ facultyCoordinator, onClose }: ExcelImportHookP
       reader.onload = (evt) => {
         if (evt.target?.result) {
           try {
-            const data = evt.target.result;
-            const workbook = XLSX.read(data, { type: 'binary' });
+            const data = new Uint8Array(evt.target.result as ArrayBuffer);
+            const workbook = XLSX.read(data, { type: 'array' });
             const firstSheet = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[firstSheet];
             const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
@@ -42,7 +42,7 @@ export const useExcelImport = ({ facultyCoordinator, onClose }: ExcelImportHookP
           }
         }
       };
-      reader.readAsBinaryString(selectedFile);
+      reader.readAsArrayBuffer(selectedFile);
     }
   };
 
@@ -73,8 +73,8 @@ export const useExcelImport = ({ facultyCoordinator, onClose }: ExcelImportHookP
       reader.onload = async (evt) => {
         if (evt.target?.result) {
           try {
-            const data = evt.target.result;
-            const workbook = XLSX.read(data, { type: 'binary' });
+            const data = new Uint8Array(evt.target.result as ArrayBuffer);
+            const workbook = XLSX.read(data, { type: 'array' });
             const firstSheet = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[firstSheet];
             const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' }) as any[];
@@ -87,21 +87,21 @@ export const useExcelImport = ({ facultyCoordinator, onClose }: ExcelImportHookP
               
               // Map for common column name variations
               const columnMappings: Record<string, string[]> = {
-                'Group No': ['Group No', 'Group', 'GroupNo', 'Group Number'],
-                'Roll No': ['Roll No', 'RollNo', 'Roll Number', 'Student Roll No'],
-                'Name': ['Name', 'Student Name', 'Full Name'],
-                'Email': ['Email', 'Student Email', 'Email Address'],
-                'Program': ['Program', 'Course'],
-                'Title': ['Title', 'Project Title'],
-                'Domain': ['Domain', 'Field', 'Area'],
-                'Faculty Mentor': ['Faculty Mentor', 'Mentor'],
-                'Industry Mentor': ['Industry Mentor', 'External Mentor'],
-                'Session': ['Session'],
-                'Year': ['Year'],
-                'Semester': ['Semester'],
-                'Progress Form': ['Progress Form', 'Progress Form URL'],
-                'Presentation': ['Presentation', 'Presentation URL'],
-                'Report': ['Report', 'Report URL'],
+                'Group No': ['Group No', 'Group', 'GroupNo', 'Group Number', 'Group_No'],
+                'Roll No': ['Roll No', 'RollNo', 'Roll Number', 'Student Roll No', 'Roll_No'],
+                'Name': ['Name', 'Student Name', 'Full Name', 'Student_Name'],
+                'Email': ['Email', 'Student Email', 'Email Address', 'Student_Email'],
+                'Program': ['Program', 'Course', 'Student_Program'],
+                'Title': ['Title', 'Project Title', 'Project_Title'],
+                'Domain': ['Domain', 'Field', 'Area', 'Project_Domain'],
+                'Faculty Mentor': ['Faculty Mentor', 'Mentor', 'Faculty_Mentor'],
+                'Industry Mentor': ['Industry Mentor', 'External Mentor', 'Industry_Mentor'],
+                'Session': ['Session', 'Project_Session'],
+                'Year': ['Year', 'Project_Year'],
+                'Semester': ['Semester', 'Project_Semester'],
+                'Progress Form': ['Progress Form', 'Progress Form URL', 'Progress_Form'],
+                'Presentation': ['Presentation', 'Presentation URL', 'Presentation_URL'],
+                'Report': ['Report', 'Report URL', 'Report_URL'],
               };
               
               // Transform the input row to normalized column names
@@ -123,17 +123,20 @@ export const useExcelImport = ({ facultyCoordinator, onClose }: ExcelImportHookP
             const groupedData: Record<string, any[]> = {};
             
             for (const row of normalizedData) {
-              if (!row['Group No']) {
-                console.error('Row missing Group No:', row);
+              // Get the group number, ensuring it's treated as a string
+              const groupNo = String(row['Group No'] || '').trim();
+              
+              // Skip rows without a group number
+              if (!groupNo) {
+                console.warn('Row missing Group No:', row);
                 continue;
               }
-              
-              const groupNo = String(row['Group No']).trim();
               
               if (!groupedData[groupNo]) {
                 groupedData[groupNo] = [];
               }
               
+              // Add this row to the appropriate group
               groupedData[groupNo].push(row);
             }
             
@@ -168,16 +171,10 @@ export const useExcelImport = ({ facultyCoordinator, onClose }: ExcelImportHookP
                   report_url: String(firstRow['Report'] || ''),
                 };
                 
-                // Ensure each student has the required fields
+                // Ensure each student has required fields
                 const students = rows.map(row => {
-                  // Ensure Roll No exists and is not empty
-                  const rollNo = String(row['Roll No'] || '').trim();
-                  if (!rollNo) {
-                    console.warn(`Missing Roll No in group ${groupNo}`, row);
-                  }
-                  
                   return {
-                    roll_no: rollNo,
+                    roll_no: String(row['Roll No'] || '').trim(),
                     name: String(row['Name'] || '').trim(),
                     email: String(row['Email'] || '').trim(),
                     program: String(row['Program'] || '').trim(),
@@ -243,7 +240,7 @@ export const useExcelImport = ({ facultyCoordinator, onClose }: ExcelImportHookP
         });
       };
       
-      reader.readAsBinaryString(file);
+      reader.readAsArrayBuffer(file);
     } catch (error) {
       console.error('Import error:', error);
       toast({

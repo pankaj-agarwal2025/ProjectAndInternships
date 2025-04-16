@@ -253,6 +253,11 @@ export async function addProject(project: Omit<Project, 'id' | 'created_at' | 'u
     console.log("Adding project with data:", project);
     console.log("Students to add:", students);
     
+    if (!project.group_no || project.group_no.trim() === '') {
+      console.error('Project is missing a group number');
+      return null;
+    }
+    
     const { data: projectData, error: projectError } = await supabase
       .from('projects')
       .insert(project)
@@ -275,6 +280,8 @@ export async function addProject(project: Omit<Project, 'id' | 'created_at' | 'u
       ...student,
       group_id: projectData.id
     }));
+    
+    console.log("Adding students with group ID:", studentsWithGroupId);
     
     const { error: studentsError } = await supabase
       .from('students')
