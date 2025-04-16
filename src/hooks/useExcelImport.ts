@@ -81,105 +81,67 @@ export const useExcelImport = ({ facultyCoordinator, onClose }: ExcelImportHookP
             
             console.log("Full Excel data:", jsonData);
             
-            // Normalize column names to handle different header styles
-            const normalizedData = jsonData.map(row => {
-              const normalizedRow: Record<string, any> = {};
-              
-              // Map for common column name variations
-              const columnMappings: Record<string, string[]> = {
-                'Group No': ['Group No', 'Group', 'GroupNo', 'Group Number', 'Group_No'],
-                'Roll No': ['Roll No', 'RollNo', 'Roll Number', 'Student Roll No', 'Roll_No'],
-                'Name': ['Name', 'Student Name', 'Full Name', 'Student_Name'],
-                'Email': ['Email', 'Student Email', 'Email Address', 'Student_Email'],
-                'Program': ['Program', 'Course', 'Student_Program'],
-                'Title': ['Title', 'Project Title', 'Project_Title'],
-                'Domain': ['Domain', 'Field', 'Area', 'Project_Domain'],
-                'Faculty Mentor': ['Faculty Mentor', 'Mentor', 'Faculty_Mentor'],
-                'Industry Mentor': ['Industry Mentor', 'External Mentor', 'Industry_Mentor'],
-                'Session': ['Session', 'Project_Session'],
-                'Year': ['Year', 'Project_Year'],
-                'Semester': ['Semester', 'Project_Semester'],
-                'Progress Form': ['Progress Form', 'Progress Form URL', 'Progress_Form'],
-                'Presentation': ['Presentation', 'Presentation URL', 'Presentation_URL'],
-                'Report': ['Report', 'Report URL', 'Report_URL'],
-              };
-              
-              // Transform the input row to normalized column names
-              Object.entries(columnMappings).forEach(([normalizedKey, variations]) => {
-                for (const variation of variations) {
-                  if (Object.prototype.hasOwnProperty.call(row, variation)) {
-                    normalizedRow[normalizedKey] = row[variation];
-                    break;
-                  }
-                }
-              });
-              
-              return normalizedRow;
-            });
-            
-            console.log("Normalized data:", normalizedData);
-            
-            // Group students by group number
-            const groupedData: Record<string, any[]> = {};
-            
-            for (const row of normalizedData) {
-              // Get the group number, ensuring it's treated as a string
-              const groupNo = String(row['Group No'] || '').trim();
-              
-              // Skip rows without a group number
-              if (!groupNo) {
-                console.warn('Row missing Group No:', row);
-                continue;
-              }
-              
-              if (!groupedData[groupNo]) {
-                groupedData[groupNo] = [];
-              }
-              
-              // Add this row to the appropriate group
-              groupedData[groupNo].push(row);
+            if (jsonData.length === 0) {
+              throw new Error('Excel file is empty or has invalid format');
             }
-            
-            console.log("Grouped data:", groupedData);
             
             // Import each group
             let successCount = 0;
             let errorCount = 0;
             
-            for (const [groupNo, rows] of Object.entries(groupedData)) {
+            // Process each row as a separate project/group
+            for (const row of jsonData) {
               try {
-                if (rows.length < 1) {
-                  console.warn(`Group ${groupNo} has no students.`);
+                console.log("Processing row:", row);
+                
+                // Extract group_no (convert to string if it's a number)
+                const groupNo = String(row['Group No'] || '').trim();
+                
+                if (!groupNo) {
+                  console.warn('Row missing Group No:', row);
                   errorCount++;
                   continue;
                 }
                 
-                const firstRow = rows[0];
-                
+                // Basic project data
                 const projectData = {
                   group_no: groupNo,
-                  title: String(firstRow['Title'] || ''),
-                  domain: String(firstRow['Domain'] || ''),
-                  faculty_mentor: String(firstRow['Faculty Mentor'] || ''),
-                  industry_mentor: String(firstRow['Industry Mentor'] || ''),
-                  session: String(firstRow['Session'] || ''),
-                  year: String(firstRow['Year'] || ''),
-                  semester: String(firstRow['Semester'] || ''),
+                  title: String(row['Title'] || ''),
+                  domain: String(row['Domain'] || ''),
+                  faculty_mentor: String(row['Faculty Mentor'] || ''),
+                  industry_mentor: String(row['Industry Mentor'] || ''),
+                  session: String(row['Session'] || ''),
+                  year: String(row['Year'] || ''),
+                  semester: String(row['Semester'] || ''),
                   faculty_coordinator: facultyCoordinator,
-                  progress_form_url: String(firstRow['Progress Form'] || ''),
-                  presentation_url: String(firstRow['Presentation'] || ''),
-                  report_url: String(firstRow['Report'] || ''),
+                  progress_form_url: String(row['Progress Form'] || ''),
+                  presentation_url: String(row['Presentation'] || ''),
+                  report_url: String(row['Report'] || ''),
+                  initial_evaluation: String(row['Initial Evaluation'] || ''),
+                  progress_evaluation: String(row['Progress Evaluation'] || ''),
+                  final_evaluation: String(row['Final Evaluation'] || '')
                 };
                 
-                // Ensure each student has required fields
-                const students = rows.map(row => {
-                  return {
-                    roll_no: String(row['Roll No'] || '').trim(),
-                    name: String(row['Name'] || '').trim(),
-                    email: String(row['Email'] || '').trim(),
-                    program: String(row['Program'] || '').trim(),
-                  };
-                }).filter(student => student.roll_no); // Filter out students without roll numbers
+                // Collect student data from the row
+                const students = [];
+                
+                // Process up to 4 students per row
+                for (let i = 1; i <= 4; i++) {
+                  const rollNo = String(row[`Student ${i} Roll No`] || '').trim();
+                  const name = String(row[`Student ${i} Name`] || '').trim();
+                  const email = String(row[`Student ${i} Email`] || '').trim();
+                  const program = String(row[`Student ${i} Program`] || '').trim();
+                  
+                  // Only add student if at least roll number is provided
+                  if (rollNo) {
+                    students.push({
+                      roll_no: rollNo,
+                      name: name,
+                      email: email,
+                      program: program
+                    });
+                  }
+                }
                 
                 console.log(`Importing group ${groupNo} with ${students.length} students:`, { projectData, students });
                 
@@ -199,7 +161,7 @@ export const useExcelImport = ({ facultyCoordinator, onClose }: ExcelImportHookP
                   errorCount++;
                 }
               } catch (error) {
-                console.error(`Error importing group ${groupNo}:`, error);
+                console.error(`Error importing row:`, error);
                 errorCount++;
               }
             }
