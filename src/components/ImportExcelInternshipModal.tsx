@@ -4,11 +4,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
 import { supabase } from '@/integrations/supabase/client';
 import { processInternshipsExcel } from '@/lib/supabase';
-import { FileSpreadsheet, Upload } from 'lucide-react';
+import { Loader2, Upload } from 'lucide-react';
 
 interface ImportExcelInternshipModalProps {
   isOpen: boolean;
@@ -23,6 +23,7 @@ const ImportExcelInternshipModal: React.FC<ImportExcelInternshipModalProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const { toast } = useToast();
   const [facultyData, setFacultyData] = useState<any>(null);
+  const [previewData, setPreviewData] = useState<any[] | null>(null);
 
   React.useEffect(() => {
     const storedFaculty = sessionStorage.getItem('faculty');
@@ -33,7 +34,36 @@ const ImportExcelInternshipModal: React.FC<ImportExcelInternshipModalProps> = ({
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      setFile(e.target.files[0]);
+      const selectedFile = e.target.files[0];
+      setFile(selectedFile);
+      
+      // Preview Excel data
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        if (evt.target?.result) {
+          try {
+            const data = new Uint8Array(evt.target.result as ArrayBuffer);
+            const workbook = XLSX.read(data, { type: 'array' });
+            
+            // Get the first worksheet
+            const wsname = workbook.SheetNames[0];
+            const ws = workbook.Sheets[wsname];
+            
+            // Convert array of arrays to array of objects
+            const jsonData = XLSX.utils.sheet_to_json(ws, { defval: '' });
+            setPreviewData(jsonData.slice(0, 5)); // Preview first 5 rows
+            console.log("Excel data preview:", jsonData.slice(0, 5));
+          } catch (error) {
+            console.error("Error previewing Excel file:", error);
+            toast({
+              title: 'Error',
+              description: 'Failed to parse Excel file. Please check the format.',
+              variant: 'destructive',
+            });
+          }
+        }
+      };
+      reader.readAsArrayBuffer(selectedFile);
     }
   };
 
@@ -69,7 +99,7 @@ const ImportExcelInternshipModal: React.FC<ImportExcelInternshipModalProps> = ({
           const wsname = workbook.SheetNames[0];
           const ws = workbook.Sheets[wsname];
           
-          // Convert array of arrays to array of objects
+          // Convert array of arrays to array of objects with default empty values for missing cells
           const jsonData = XLSX.utils.sheet_to_json(ws, { defval: '' });
           console.log("Excel data parsed:", jsonData);
 
@@ -77,8 +107,51 @@ const ImportExcelInternshipModal: React.FC<ImportExcelInternshipModalProps> = ({
             throw new Error('Excel file is empty or has invalid format');
           }
 
+          // Normalize column names to handle different header styles
+          const normalizedData = jsonData.map(row => {
+            const normalizedRow: Record<string, any> = {};
+            
+            // Map for common column name variations
+            const columnMappings: Record<string, string[]> = {
+              'roll_no': ['roll_no', 'Roll No', 'RollNo', 'Roll Number', 'Student Roll No'],
+              'name': ['name', 'Name', 'Student Name', 'Full Name'],
+              'email': ['email', 'Email', 'Student Email', 'Email Address'],
+              'phone_no': ['phone_no', 'Phone No', 'Phone', 'Contact', 'Mobile'],
+              'domain': ['domain', 'Domain', 'Field', 'Area'],
+              'session': ['session', 'Session'],
+              'year': ['year', 'Year'],
+              'semester': ['semester', 'Semester'],
+              'program': ['program', 'Program', 'Course'],
+              'organization_name': ['organization_name', 'Organization', 'Organization Name', 'Company', 'Company Name'],
+              'starting_date': ['starting_date', 'Starting Date', 'Start Date', 'From Date'],
+              'ending_date': ['ending_date', 'Ending Date', 'End Date', 'To Date'],
+              'position': ['position', 'Position', 'Role', 'Designation'],
+              'offer_letter_url': ['offer_letter_url', 'Offer Letter', 'Offer'],
+              'noc_url': ['noc_url', 'NOC', 'No Objection Certificate'],
+              'ppo_url': ['ppo_url', 'PPO', 'Pre Placement Offer'],
+            };
+            
+            // Transform the input row to normalized column names
+            Object.entries(columnMappings).forEach(([normalizedKey, variations]) => {
+              for (const variation of variations) {
+                if (Object.prototype.hasOwnProperty.call(row, variation)) {
+                  normalizedRow[normalizedKey] = row[variation];
+                  break;
+                }
+              }
+              // If no match found, provide default value
+              if (!Object.prototype.hasOwnProperty.call(normalizedRow, normalizedKey)) {
+                normalizedRow[normalizedKey] = '';
+              }
+            });
+            
+            return normalizedRow;
+          });
+
+          console.log("Normalized data:", normalizedData);
+
           // Process and insert data into the database
-          const result = await processInternshipsExcel(jsonData, facultyData.name);
+          const result = await processInternshipsExcel(normalizedData, facultyData.name);
 
           if (result) {
             toast({
@@ -126,7 +199,7 @@ const ImportExcelInternshipModal: React.FC<ImportExcelInternshipModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle>Import Internships from Excel</DialogTitle>
           <DialogDescription>
@@ -134,8 +207,8 @@ const ImportExcelInternshipModal: React.FC<ImportExcelInternshipModalProps> = ({
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="excel-file" className="text-right">
+          <div className="grid items-center gap-4">
+            <Label htmlFor="excel-file">
               Excel File
             </Label>
             <Input
@@ -143,18 +216,29 @@ const ImportExcelInternshipModal: React.FC<ImportExcelInternshipModalProps> = ({
               type="file"
               accept=".xlsx, .xls"
               onChange={handleFileChange}
-              className="col-span-3"
             />
+            <p className="text-xs text-gray-500">
+              Required columns: Roll No, Name, Email, Program, Organization Name. Other columns are optional.
+            </p>
           </div>
+          
+          {previewData && previewData.length > 0 && (
+            <div className="space-y-2">
+              <Label>Data Preview (First 5 rows)</Label>
+              <div className="max-h-40 overflow-y-auto border rounded-md p-2">
+                <pre className="text-xs">{JSON.stringify(previewData, null, 2)}</pre>
+              </div>
+            </div>
+          )}
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleUpload} disabled={isUploading}>
+          <Button onClick={handleUpload} disabled={isUploading || !file || !facultyData?.name}>
             {isUploading ? (
               <>
-                <FileSpreadsheet className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Uploading...
               </>
             ) : (
