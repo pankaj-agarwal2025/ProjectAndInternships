@@ -12,7 +12,7 @@ const Landing = () => {
       <div 
         className="absolute inset-0 bg-cover bg-center z-0"
         style={{ 
-          backgroundImage: 'url("public/lovable-uploads/02ea0b14-a3ec-40c9-8a48-952c417675fc.png")',
+          backgroundImage: 'url("public/lovable-uploads/2b5366a7-4406-492a-bb07-04dd88fe5ea0.png")',
           backgroundSize: 'cover'
         }}
       >
