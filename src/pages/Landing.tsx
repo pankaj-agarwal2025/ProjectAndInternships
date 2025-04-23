@@ -4,18 +4,19 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { GraduationCap, ArrowRight } from 'lucide-react';
+import image1 from '../../public/lovable-uploads/2b5366a7-4406-492a-bb07-04dd88fe5ea0.png'
 
 const Landing = () => {
   return (
     <div className="min-h-screen relative overflow-hidden">
       {/* Background Image with Overlay */}
       <div 
-        className="absolute inset-0 bg-cover bg-center z-0"
-        style={{ 
-          backgroundImage: 'url("/public/lovable-uploads/2b5366a7-4406-492a-bb07-04dd88fe5ea0.png")',
-          backgroundSize: 'cover'
-        }}
-      >
+  className="absolute inset-0 bg-cover bg-center z-0"
+  style={{ 
+    backgroundImage: `url(${image1})`,
+    backgroundSize: 'cover'
+  }}
+/>
         <div className="absolute inset-0 backdrop-blur-xl bg-gradient-to-b from-black/80 via-black/60 to-black/80"></div>
       </div>
       
