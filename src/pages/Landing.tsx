@@ -1,30 +1,27 @@
-
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { GraduationCap, ArrowRight } from 'lucide-react';
-import image1 from '../../public/lovable-uploads/2b5366a7-4406-492a-bb07-04dd88fe5ea0.png'
 
 const Landing = () => {
   return (
     <div className="min-h-screen relative overflow-hidden">
       {/* Background Image with Overlay */}
       <div 
-  className="absolute inset-0 bg-cover bg-center z-0"
-  style={{ 
-    backgroundImage: `url(${image1})`,
-    backgroundSize: 'cover'
-  }}
-/>
-        <div className="absolute inset-0 backdrop-blur-xl bg-gradient-to-b from-black/80 via-black/60 to-black/80"></div>
-      </div>
-      
+        className="absolute inset-0 bg-cover bg-center z-0"
+        style={{ 
+          backgroundImage: 'url("/lovable-uploads/2b5366a7-4406-492a-bb07-04dd88fe5ea0.png")',
+          backgroundSize: 'cover'
+        }}
+      />
+      <div className="absolute inset-0 backdrop-blur-xl bg-gradient-to-b from-black/80 via-black/60 to-black/80"></div>
+
       {/* Header with Logo */}
       <header className="relative z-10 flex justify-between items-center p-4">
         <div className="flex items-center">
           <img 
-            src="public/lovable-uploads/b33b909d-7859-40ab-a23f-ac4754a64fca.png" 
+            src="/lovable-uploads/b33b909d-7859-40ab-a23f-ac4754a64fca.png" 
             alt="K.R. Mangalam University Logo" 
             className="w-10 h-10 md:w-12 md:h-12 mr-2 object-contain"
           />
@@ -68,7 +65,7 @@ const Landing = () => {
             className="mt-10"
           >
             <Link to="/login">
-              <Button className="text-lg px-10 py-6 bg-blue-500 hover:bg-blue-600 transition-all shadow-lg hover:shadow-xl rounded-full flex items-center gap-3">
+              <Button className="text-lg px-10 py-6 bg-blue-500 hover:bg-blue-600 transition-all shadow-lg hover:shadow-xl rounded-full flex items-center gap-3 group">
                 <GraduationCap size={24} />
                 Get Started
                 <ArrowRight size={20} className="ml-2 transition-transform group-hover:translate-x-1" />
