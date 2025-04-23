@@ -1,28 +1,11 @@
-# Welcome to your Lovable project
+# Welcome to the project
 
 ## Project info
 
-**URL**: https://lovable.dev/projects/80d81b8b-ba83-461a-a0ce-1573e47b18fe
 
-## How can I edit this code?
+## How to create clone of this code?
 
-There are several ways of editing your application.
 
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/80d81b8b-ba83-461a-a0ce-1573e47b18fe) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
 # Step 1: Clone the repository using the project's Git URL.
 git clone <YOUR_GIT_URL>
 
@@ -54,20 +37,8 @@ npm run dev
 
 This project is built with:
 
-- Vite
 - TypeScript
 - React
-- shadcn-ui
 - Tailwind CSS
+-Supabase(for backend)
 
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/80d81b8b-ba83-461a-a0ce-1573e47b18fe) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes it is!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
