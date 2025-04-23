@@ -10,7 +10,7 @@ import Home from "./pages/Home";
 import ProjectPortal from "./pages/ProjectPortal";
 import InternshipPortal from "./pages/InternshipPortal";
 import NotFound from "./pages/NotFound";
-import Footer from "./components/Footer";
+import Footer from "./components/footer";
 
 const queryClient = new QueryClient();
 
