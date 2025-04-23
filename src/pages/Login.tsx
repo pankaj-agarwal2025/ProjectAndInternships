@@ -133,7 +133,7 @@ const Login = () => {
             <CardHeader className="space-y-4 pb-6">
               <div className="flex justify-center mb-2">
                 <img 
-                  src="/lovable-uploads/b33b909d-7859-40ab-a23f-ac4754a64fca.png" 
+                  src="/public/lovable-uploads/b33b909d-7859-40ab-a23f-ac4754a64fca.png" 
                   alt="K.R. Mangalam University Logo" 
                   className="w-24 h-24 object-contain"
                 />
