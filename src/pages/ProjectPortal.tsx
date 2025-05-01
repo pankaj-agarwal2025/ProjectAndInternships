@@ -137,7 +137,6 @@ const ProjectPortal = () => {
         onClose={() => setShowImportExcelModal(false)}
       />
 
-      <Footer />
     </div>
   );
 };
