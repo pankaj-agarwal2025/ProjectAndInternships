@@ -60,8 +60,6 @@ export interface Project {
   presentation_url?: string;
   report_url?: string;
   initial_evaluation?: string;
-  progress_evaluation?: string;
-  final_evaluation?: string;
   students?: Student[];
   project_category?: string;
   // Evaluation fields
@@ -94,7 +92,6 @@ export interface ProjectData {
   semester?: string;
   faculty_coordinator?: string;
   project_category?: string;
-  students?: any[];
 }
 
 export interface InternshipData {
@@ -432,8 +429,6 @@ export const addInternshipDynamicColumnValue = async (columnId: string, internsh
 export const processProjectsExcel = async (excelData: any[], facultyCoordinator: string) => {
   try {
     // Logic to process Excel data and update/create projects
-    // Implementation would depend on your specific requirements
-    
     // For each row in Excel
     for (const row of excelData) {
       // Check if this project already exists

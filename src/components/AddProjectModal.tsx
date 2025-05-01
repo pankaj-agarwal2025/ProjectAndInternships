@@ -26,10 +26,18 @@ const facultyCoordinators = [
   'dr.pankaj', 'dr.anshu', 'dr.meenu', 'dr.swati'
 ];
 
+// Student interface for the local state
+interface StudentForm {
+  roll_no: string;
+  name: string;
+  email: string;
+  program: string;
+}
+
 const AddProjectModal: React.FC<AddProjectModalProps> = ({ isOpen, onClose }) => {
   const [minStudents, setMinStudents] = useState(1);
   const [maxStudents, setMaxStudents] = useState(4);
-  const [students, setStudents] = useState([
+  const [students, setStudents] = useState<StudentForm[]>([
     { roll_no: '', name: '', email: '', program: '' }
   ]);
   

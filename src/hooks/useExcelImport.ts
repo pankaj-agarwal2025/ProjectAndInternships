@@ -4,192 +4,115 @@ import * as XLSX from 'xlsx';
 import { processProjectsExcel } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
 
-interface UseExcelImportProps {
-  facultyCoordinator: string;
-  onClose: () => void;
-}
-
-const useExcelImport = ({ facultyCoordinator, onClose }: UseExcelImportProps) => {
-  const [file, setFile] = useState<File | null>(null);
-  const [previewData, setPreviewData] = useState<any[]>([]);
+export function useExcelImport() {
   const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
   const { toast } = useToast();
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      const selectedFile = files[0];
-      setFile(selectedFile);
-      
-      // Preview the Excel data
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-        try {
-          const binaryString = evt.target?.result;
-          const workbook = XLSX.read(binaryString, { type: 'binary' });
-          const firstSheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[firstSheetName];
-          
-          // Convert to JSON
-          const jsonData = XLSX.utils.sheet_to_json(worksheet);
-          setPreviewData(jsonData.slice(0, 5)); // Show only first 5 rows as preview
-        } catch (error) {
-          console.error('Error reading Excel file:', error);
-          toast({
-            title: 'Error',
-            description: 'Failed to read Excel file. Please ensure it is a valid Excel file.',
-            variant: 'destructive',
-          });
-        }
-      };
-      reader.readAsBinaryString(selectedFile);
-    }
-  };
-
-  const processExcelData = (jsonData: any[]) => {
-    // Convert Excel data to structured project data
-    const projects: any[] = [];
-    
-    // Group by project
-    const projectGroups: Record<string, any> = {};
-    
-    jsonData.forEach((row) => {
-      const groupKey = `${row['Group No'] || ''}:${row['Year'] || ''}:${row['Semester'] || ''}`;
-      
-      if (!projectGroups[groupKey]) {
-        projectGroups[groupKey] = {
-          group_no: row['Group No'],
-          title: row['Title'],
-          domain: row['Domain'],
-          faculty_mentor: row['Faculty Mentor'],
-          industry_mentor: row['Industry Mentor'],
-          session: row['Session'],
-          year: row['Year'],
-          semester: row['Semester'],
-          project_category: row['Project Category'],
-          students: []
-        };
-      }
-      
-      // Add student if Roll No exists
-      if (row['Roll No']) {
-        projectGroups[groupKey].students.push({
-          roll_no: row['Roll No'],
-          name: row['Name'],
-          email: row['Email'],
-          program: row['Program']
-        });
-      }
-      
-      // Add evaluation fields if they exist
-      for (const field of ['Clarity of Objectives', 'Background & Feasibility Study', 
-                          'Usability/Applications', 'Innovation/Novelty']) {
-        if (row[field] !== undefined) {
-          const key = `initial_${field.toLowerCase().replace(/[&\s]/g, '_')}`;
-          projectGroups[groupKey][key] = parseFloat(row[field]);
-        }
-      }
-      
-      for (const field of ['Data Extraction & Processing', 'Methodology', 'Implementation', 
-                           'Code Optimization', 'User Interface']) {
-        if (row[field] !== undefined) {
-          const key = `progress_${field.toLowerCase().replace(/[&\s]/g, '_')}`;
-          projectGroups[groupKey][key] = parseFloat(row[field]);
-        }
-      }
-      
-      for (const field of ['Implementation', 'Results', 'Research Paper & Report', 
-                          'Project Completion and Validation']) {
-        if (row[field] !== undefined) {
-          const key = `final_${field.toLowerCase().replace(/[&\s]/g, '_')}`;
-          projectGroups[groupKey][key] = parseFloat(row[field]);
-        }
-      }
-    });
-    
-    // Convert groups to array
-    for (const key in projectGroups) {
-      projects.push(projectGroups[key]);
-    }
-    
-    return projects;
-  };
-
-  const handleImport = async () => {
-    if (!file) {
-      toast({
-        title: 'No File Selected',
-        description: 'Please select an Excel file to import.',
-        variant: 'destructive',
-      });
-      return;
-    }
-    
-    if (!facultyCoordinator) {
-      toast({
-        title: 'Missing Faculty Information',
-        description: 'Faculty information is required for import.',
-        variant: 'destructive',
-      });
-      return;
-    }
+  const handleExcelImport = async (file: File, facultyCoordinator: string) => {
+    if (!file) return;
     
     setIsImporting(true);
+    setImportProgress(10);
     
     try {
-      const reader = new FileReader();
-      reader.onload = async (evt) => {
-        try {
-          const binaryString = evt.target?.result;
-          const workbook = XLSX.read(binaryString, { type: 'binary' });
-          const firstSheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[firstSheetName];
+      // Read the Excel file
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      setImportProgress(30);
+      
+      // Get the first sheet
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      
+      // Convert to JSON
+      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      setImportProgress(50);
+      
+      if (!Array.isArray(jsonData) || jsonData.length === 0) {
+        throw new Error('No data found in the Excel file.');
+      }
+      
+      // Process the data
+      console.log('Processing Excel data:', jsonData);
+      
+      // Extract and process student data if present in a specific format
+      const projectsWithStudents = jsonData.map((project: any) => {
+        // Check if there are student columns
+        const studentKeys = Object.keys(project).filter(key => 
+          key.includes('student_') && 
+          key.includes('_name')
+        );
+        
+        if (studentKeys.length > 0) {
+          // Extract student data
+          const students = [];
           
-          // Convert to JSON
-          const jsonData = XLSX.utils.sheet_to_json(worksheet);
+          // Find all unique student prefixes (e.g., student_1, student_2)
+          const studentPrefixes = new Set<string>();
+          for (const key of Object.keys(project)) {
+            if (key.includes('student_')) {
+              const prefix = key.split('_').slice(0, 2).join('_');
+              studentPrefixes.add(prefix);
+            }
+          }
           
-          // Process the data
-          const processedData = processExcelData(jsonData);
+          // For each student prefix, extract all data
+          for (const prefix of studentPrefixes) {
+            const student = {
+              name: project[`${prefix}_name`] || '',
+              roll_no: project[`${prefix}_roll_no`] || '',
+              email: project[`${prefix}_email`] || '',
+              program: project[`${prefix}_program`] || ''
+            };
+            
+            // Only add if we have name and roll_no
+            if (student.name && student.roll_no) {
+              students.push(student);
+            }
+          }
           
-          // Save to database
-          await processProjectsExcel(processedData, facultyCoordinator);
-          
-          toast({
-            title: 'Import Successful',
-            description: `Successfully imported ${processedData.length} projects.`,
-          });
-          
-          onClose();
-        } catch (error) {
-          console.error('Error processing Excel data:', error);
-          toast({
-            title: 'Import Error',
-            description: 'Failed to process Excel data. Please check the file format.',
-            variant: 'destructive',
-          });
-        } finally {
-          setIsImporting(false);
+          return {
+            ...project,
+            students
+          };
         }
-      };
-      reader.readAsBinaryString(file);
+        
+        return project;
+      });
+      
+      setImportProgress(70);
+      
+      // Send to server
+      const result = await processProjectsExcel(projectsWithStudents, facultyCoordinator);
+      
+      setImportProgress(100);
+      
+      if (result) {
+        toast({
+          title: 'Import Complete',
+          description: `Successfully processed ${jsonData.length} projects from Excel.`,
+        });
+        return true;
+      }
     } catch (error) {
-      console.error('Error reading file:', error);
+      console.error('Error importing Excel:', error);
       toast({
-        title: 'Import Error',
-        description: 'Failed to read the Excel file.',
+        title: 'Import Failed',
+        description: error instanceof Error ? error.message : 'An error occurred during import.',
         variant: 'destructive',
       });
+      return false;
+    } finally {
       setIsImporting(false);
     }
   };
 
   return {
-    file,
-    previewData,
+    handleExcelImport,
     isImporting,
-    handleFileChange,
-    handleImport
+    importProgress
   };
-};
+}
 
 export default useExcelImport;
