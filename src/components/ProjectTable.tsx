@@ -473,7 +473,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
     }
     
     try {
-      await addDynamicColumn(newColumnName, newColumnType);
+      await addDynamicColumn(newColumnName, newColumnType || 'text');
       fetchDynamicColumns();
       setShowAddColumnModal(false);
       setNewColumnName('');
@@ -1429,7 +1429,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
               <label htmlFor="column_type" className="text-right">
                 Column Type
               </label>
-              <Select onValueChange={(value) => setNewColumnType(value)}>
+              <Select value={newColumnType || 'text'} onValueChange={(value) => setNewColumnType(value)}>
                 <SelectTrigger className="col-span-3">
                   <SelectValue placeholder="Select a type" />
                 </SelectTrigger>

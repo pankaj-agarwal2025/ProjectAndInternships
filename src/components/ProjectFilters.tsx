@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Search } from 'lucide-react';
@@ -101,12 +100,12 @@ const ProjectFilters: React.FC<ProjectFiltersProps> = ({ onFilterChange }) => {
   const handleFilterApply = () => {
     onFilterChange({
       group_no: groupNo,
-      domain,
-      year,
-      semester,
-      session,
-      faculty_coordinator: facultyCoordinator,
-      project_category: projectCategory,
+      domain: domain === 'all_domains' ? '' : domain,
+      year: year === 'all_years' ? '' : year,
+      semester: semester === 'all_semesters' ? '' : semester,
+      session: session === 'all_sessions' ? '' : session,
+      faculty_coordinator: facultyCoordinator === 'all_coordinators' ? '' : facultyCoordinator,
+      project_category: projectCategory === 'all_categories' ? '' : projectCategory,
       searchTerm,
     });
   };
@@ -155,7 +154,7 @@ const ProjectFilters: React.FC<ProjectFiltersProps> = ({ onFilterChange }) => {
               <SelectValue placeholder="Select domain" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All domains</SelectItem>
+              <SelectItem value="all_domains">All domains</SelectItem>
               {availableDomains.map((d) => (
                 <SelectItem key={d} value={d}>{d}</SelectItem>
               ))}
@@ -170,7 +169,7 @@ const ProjectFilters: React.FC<ProjectFiltersProps> = ({ onFilterChange }) => {
               <SelectValue placeholder="Select category" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All categories</SelectItem>
+              <SelectItem value="all_categories">All categories</SelectItem>
               <SelectItem value="Industry Based">Industry Based</SelectItem>
               <SelectItem value="Research Based">Research Based</SelectItem>
             </SelectContent>
@@ -184,7 +183,7 @@ const ProjectFilters: React.FC<ProjectFiltersProps> = ({ onFilterChange }) => {
               <SelectValue placeholder="Select year" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All years</SelectItem>
+              <SelectItem value="all_years">All years</SelectItem>
               {availableYears.map((y) => (
                 <SelectItem key={y} value={y}>{y}</SelectItem>
               ))}
@@ -199,7 +198,7 @@ const ProjectFilters: React.FC<ProjectFiltersProps> = ({ onFilterChange }) => {
               <SelectValue placeholder="Select semester" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All semesters</SelectItem>
+              <SelectItem value="all_semesters">All semesters</SelectItem>
               {availableSemesters.map((s) => (
                 <SelectItem key={s} value={s}>{s}</SelectItem>
               ))}
@@ -214,7 +213,7 @@ const ProjectFilters: React.FC<ProjectFiltersProps> = ({ onFilterChange }) => {
               <SelectValue placeholder="Select session" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All sessions</SelectItem>
+              <SelectItem value="all_sessions">All sessions</SelectItem>
               {availableSessions.map((s) => (
                 <SelectItem key={s} value={s}>{s}</SelectItem>
               ))}
@@ -229,7 +228,7 @@ const ProjectFilters: React.FC<ProjectFiltersProps> = ({ onFilterChange }) => {
               <SelectValue placeholder="Select faculty" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All coordinators</SelectItem>
+              <SelectItem value="all_coordinators">All coordinators</SelectItem>
               {availableCoordinators.map((c) => (
                 <SelectItem key={c} value={c}>{c}</SelectItem>
               ))}
