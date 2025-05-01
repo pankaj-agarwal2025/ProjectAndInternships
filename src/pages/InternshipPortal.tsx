@@ -133,7 +133,10 @@ const InternshipPortal = () => {
         onClose={() => setShowImportExcelModal(false)}
       />
     </div>
+    
+   
   );
+  
 };
 
 export default InternshipPortal;

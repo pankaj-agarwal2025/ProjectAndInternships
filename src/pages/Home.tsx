@@ -10,28 +10,33 @@ import { Faculty } from '@/lib/supabase';
 const Home = () => {
   const navigate = useNavigate();
   const [faculty, setFaculty] = React.useState<Faculty | null>(null);
-  
+
   useEffect(() => {
     // Check if user is logged in
     const facultyData = sessionStorage.getItem('faculty');
-    
+
     if (!facultyData) {
       navigate('/login');
       return;
     }
-    
+
     setFaculty(JSON.parse(facultyData));
   }, [navigate]);
-  
+
   const handleLogout = () => {
     sessionStorage.removeItem('faculty');
     navigate('/');
   };
-  
+
   const portalCards = [
     {
       title: 'Project Portal',
-      description: 'Manage student projects, track progress, upload documents, and view reports.',
+      description: [
+        'Organize students into project groups',
+        'Track project progress and submissions',
+        'Evaluate project phases and provide feedback',
+        'Export project data for reporting',
+      ],
       link: '/project-portal',
       color: 'bg-primary/10',
       borderColor: 'border-primary/20',
@@ -42,7 +47,10 @@ const Home = () => {
     },
     {
       title: 'Internship Portal',
-      description: 'Manage student internships, track details, upload offer letters, and generate reports.',
+      description: ['Track internship placements and organizations',
+        'Manage internship documentation',
+        'Monitor internship duration and positions',
+        'Generate reports and analytics'],
       link: '/internship-portal',
       color: 'bg-secondary/10',
       borderColor: 'border-secondary/20',
@@ -53,20 +61,20 @@ const Home = () => {
       disabled: false
     }
   ];
-  
+
   if (!faculty) {
     return null; // Will redirect in useEffect
   }
-  
+
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
       {/* Header with navigation */}
       <header className="bg-white dark:bg-gray-800 shadow-md border-b sticky top-0 z-10">
         <div className="container mx-auto px-4 py-3 flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <img 
-              src="public/lovable-uploads/b33b909d-7859-40ab-a23f-ac4754a64fca.png" 
-              alt="K.R. Mangalam University Logo" 
+            <img
+              src="public/lovable-uploads/b33b909d-7859-40ab-a23f-ac4754a64fca.png"
+              alt="K.R. Mangalam University Logo"
               className="w-10 h-10 object-contain"
             />
             <h1 className="text-xl font-bold text-primary">K.R. Mangalam University</h1>
@@ -83,12 +91,12 @@ const Home = () => {
           </div>
         </div>
       </header>
-      
+
       {/* Main content */}
       <main className="container mx-auto px-4 py-12 flex-grow">
         <div className="max-w-5xl mx-auto">
           <div className="mb-10 text-center">
-            <motion.h1 
+            <motion.h1
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
@@ -96,7 +104,7 @@ const Home = () => {
             >
               Welcome, {faculty.name}
             </motion.h1>
-            <motion.p 
+            <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.5, delay: 0.2 }}
@@ -105,7 +113,7 @@ const Home = () => {
               Project-Internship Management Portal
             </motion.p>
           </div>
-          
+
           {/* Portal cards */}
           <div className="grid md:grid-cols-2 gap-8">
             {portalCards.map((card, index) => (
@@ -123,8 +131,14 @@ const Home = () => {
                     </div>
                   </CardHeader>
                   <CardContent className="p-6">
-                    <CardDescription className="text-base mt-2">
-                      {card.description}
+                    <CardDescription className="text-base mt-2 space-y-1 text-muted-foreground">
+                      {Array.isArray(card.description) ? (
+                        card.description.map((line, idx) => (
+                          <p key={idx}>{line}</p>
+                        ))
+                      ) : (
+                        <p>{card.description}</p>
+                      )}
                     </CardDescription>
                   </CardContent>
                   <CardFooter className="p-6 pt-0">
@@ -147,13 +161,13 @@ const Home = () => {
           </div>
         </div>
       </main>
-      
+
       {/* Footer */}
-      <footer className="bg-white dark:bg-gray-800 border-t py-4 mt-auto">
+      {/* <footer className="bg-white dark:bg-gray-800 border-t py-4 mt-auto">
         <div className="container mx-auto px-4 text-center text-gray-500 dark:text-gray-400 text-sm">
           <p>© {new Date().getFullYear()} K.R. Mangalam University. All rights reserved.</p>
         </div>
-      </footer>
+      </footer> */}
     </div>
   );
 };

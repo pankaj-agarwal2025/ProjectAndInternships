@@ -10,6 +10,7 @@ import Home from "./pages/Home";
 import ProjectPortal from "./pages/ProjectPortal";
 import InternshipPortal from "./pages/InternshipPortal";
 import NotFound from "./pages/NotFound";
+import Footer from "./components/Footer";
 
 const queryClient = new QueryClient();
 
@@ -18,18 +19,23 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/home" element={<Home />} />
-          <Route path="/project-portal" element={<ProjectPortal />} />
-          <Route path="/internship-portal" element={<InternshipPortal />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
+      <div className="flex flex-col min-h-screen">
+        <BrowserRouter>
+          <div className="flex-grow">
+            <Routes>
+              <Route path="/" element={<Landing />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/home" element={<Home />} />
+              <Route path="/project-portal" element={<ProjectPortal />} />
+              <Route path="/internship-portal" element={<InternshipPortal />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </div>
+        </BrowserRouter>
+        <Footer />
+      </div>
+    </TooltipProvider >
+  </QueryClientProvider >
 );
 
 export default App;

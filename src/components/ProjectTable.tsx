@@ -808,14 +808,15 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
                 onChange={(e) => {
                   if (e.target.files && e.target.files[0]) {
                     setFileForUpload(e.target.files[0]);
-                    handleUploadFile(projectId, column.id);
+                    // handleUploadFile(projectId, column.id);
                   }
                 }}
               />
               <Button 
                 size="sm" 
                 variant="outline" 
-                onClick={() => {
+                onClick={() =>  {
+                  handleUploadFile(projectId, column.id);
                   setIsLinkEditable(true);
                   setEditLinkURL(value?.value || '');
                   setEditLinkColumnId(column.id);
