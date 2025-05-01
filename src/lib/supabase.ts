@@ -10,6 +10,7 @@ export interface Faculty {
   username: string;
   password: string;
   name: string;
+  role?: string;
 }
 
 export interface Project {
@@ -165,8 +166,8 @@ export async function setupDatabase() {
     if (faculties?.length === 0 || !faculties) {
       const defaultFaculties = [
         { username: 'dr.pankaj', password: 'password', name: 'Dr. Pankaj' },
-        { username: 'dr.anshu', password: 'password', name: 'Dr. Anshu' },
-        { username: 'dr.meenu', password: 'password', name: 'Dr. Meenu' },
+        { username: 'dr.anshu', password: 'password', name: 'Dr. Anshu', role: 'admin' },
+        { username: 'dr.meenu', password: 'password', name: 'Dr. Meenu', role: 'admin' },
         { username: 'dr.swati', password: 'password', name: 'Dr. Swati' },
       ];
       
@@ -688,7 +689,7 @@ export async function processInternshipsExcel(excelData: any[], facultyCoordinat
         endDate = date.toISOString().split('T')[0];
       }
       
-      return {
+      const internshipData = {
         roll_no: String(row.roll_no || row['Roll No'] || '').trim(),
         name: String(row.name || row['Name'] || '').trim(),
         email: String(row.email || row['Email'] || '').trim(),
@@ -707,6 +708,8 @@ export async function processInternshipsExcel(excelData: any[], facultyCoordinat
         ppo_url: String(row.ppo_url || row['PPO'] || '').trim(),
         faculty_coordinator: facultyCoordinator
       };
+      
+      return internshipData;
     });
     
     console.log('Processed internship data:', processedData);
@@ -716,17 +719,81 @@ export async function processInternshipsExcel(excelData: any[], facultyCoordinat
       return null;
     }
     
-    const { data, error } = await supabase
-      .from('internships')
-      .insert(processedData)
-      .select();
+    // Process each internship - check if exists first
+    const results = [];
     
-    if (error) {
-      console.error('Error inserting excel data:', error);
-      return null;
+    for (const internship of processedData) {
+      if (!internship.roll_no || !internship.name) continue;
+      
+      // Check if the internship already exists based on criteria
+      const { data: existingInternships, error: queryError } = await supabase
+        .from('internships')
+        .select('id')
+        .eq('roll_no', internship.roll_no)
+        .eq('name', internship.name)
+        .eq('organization_name', internship.organization_name || '')
+        .eq('position', internship.position || '');
+        
+      if (queryError) {
+        console.error('Error checking existing internship:', queryError);
+        continue;
+      }
+      
+      if (existingInternships && existingInternships.length > 0) {
+        // Update existing internship
+        const internshipId = existingInternships[0].id;
+        const updates: Record<string, any> = {};
+        
+        // Only include fields that have values
+        Object.entries(internship).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && value !== '') {
+            updates[key] = value;
+          }
+        });
+        
+        if (Object.keys(updates).length > 0) {
+          const { error: updateError } = await supabase
+            .from('internships')
+            .update(updates)
+            .eq('id', internshipId);
+            
+          if (updateError) {
+            console.error('Error updating internship:', updateError);
+            continue;
+          }
+          
+          results.push({
+            action: 'updated',
+            roll_no: internship.roll_no
+          });
+        }
+      } else {
+        // Insert new internship
+        const { data: newInternship, error: insertError } = await supabase
+          .from('internships')
+          .insert(internship)
+          .select();
+          
+        if (insertError) {
+          console.error('Error inserting internship:', insertError);
+          continue;
+        }
+        
+        if (newInternship) {
+          results.push({
+            action: 'inserted',
+            roll_no: internship.roll_no
+          });
+        }
+      }
     }
     
-    return data;
+    return {
+      success: true,
+      total: results.length,
+      inserted: results.filter(r => r.action === 'inserted').length,
+      updated: results.filter(r => r.action === 'updated').length
+    };
   } catch (error) {
     console.error('Error processing excel data:', error);
     return null;

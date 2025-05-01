@@ -75,6 +75,7 @@ export type Database = {
           id: string
           name: string
           password: string
+          role: string | null
           username: string
         }
         Insert: {
@@ -82,6 +83,7 @@ export type Database = {
           id?: string
           name: string
           password: string
+          role?: string | null
           username: string
         }
         Update: {
@@ -89,6 +91,7 @@ export type Database = {
           id?: string
           name?: string
           password?: string
+          role?: string | null
           username?: string
         }
         Relationships: []
@@ -232,13 +235,30 @@ export type Database = {
           faculty_coordinator: string | null
           faculty_mentor: string | null
           final_evaluation: string | null
+          final_implementation: number | null
+          final_project_completion: number | null
+          final_research_paper: number | null
+          final_results: number | null
+          final_total: number | null
           group_no: string
           id: string
           industry_mentor: string | null
+          initial_background_feasibility: number | null
+          initial_clarity_objectives: number | null
           initial_evaluation: string | null
+          initial_innovation_novelty: number | null
+          initial_total: number | null
+          initial_usability_applications: number | null
           presentation_url: string | null
+          progress_code_optimization: number | null
+          progress_data_extraction: number | null
           progress_evaluation: string | null
           progress_form_url: string | null
+          progress_implementation: number | null
+          progress_methodology: number | null
+          progress_total: number | null
+          progress_user_interface: number | null
+          project_category: string | null
           report_url: string | null
           semester: string | null
           session: string | null
@@ -252,13 +272,30 @@ export type Database = {
           faculty_coordinator?: string | null
           faculty_mentor?: string | null
           final_evaluation?: string | null
+          final_implementation?: number | null
+          final_project_completion?: number | null
+          final_research_paper?: number | null
+          final_results?: number | null
+          final_total?: number | null
           group_no: string
           id?: string
           industry_mentor?: string | null
+          initial_background_feasibility?: number | null
+          initial_clarity_objectives?: number | null
           initial_evaluation?: string | null
+          initial_innovation_novelty?: number | null
+          initial_total?: number | null
+          initial_usability_applications?: number | null
           presentation_url?: string | null
+          progress_code_optimization?: number | null
+          progress_data_extraction?: number | null
           progress_evaluation?: string | null
           progress_form_url?: string | null
+          progress_implementation?: number | null
+          progress_methodology?: number | null
+          progress_total?: number | null
+          progress_user_interface?: number | null
+          project_category?: string | null
           report_url?: string | null
           semester?: string | null
           session?: string | null
@@ -272,13 +309,30 @@ export type Database = {
           faculty_coordinator?: string | null
           faculty_mentor?: string | null
           final_evaluation?: string | null
+          final_implementation?: number | null
+          final_project_completion?: number | null
+          final_research_paper?: number | null
+          final_results?: number | null
+          final_total?: number | null
           group_no?: string
           id?: string
           industry_mentor?: string | null
+          initial_background_feasibility?: number | null
+          initial_clarity_objectives?: number | null
           initial_evaluation?: string | null
+          initial_innovation_novelty?: number | null
+          initial_total?: number | null
+          initial_usability_applications?: number | null
           presentation_url?: string | null
+          progress_code_optimization?: number | null
+          progress_data_extraction?: number | null
           progress_evaluation?: string | null
           progress_form_url?: string | null
+          progress_implementation?: number | null
+          progress_methodology?: number | null
+          progress_total?: number | null
+          progress_user_interface?: number | null
+          project_category?: string | null
           report_url?: string | null
           semester?: string | null
           session?: string | null
