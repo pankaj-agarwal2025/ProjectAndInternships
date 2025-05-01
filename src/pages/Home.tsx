@@ -7,6 +7,7 @@ import { Faculty, setupDatabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
 import Navbar from '@/components/Navbar';
 import AdminPanel from '@/components/AdminPanel';
+import Footer from '@/components/footer';
 import { BookOpen, Users, LogOut } from 'lucide-react';
 
 const Home = () => {
@@ -62,10 +63,10 @@ const Home = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col">
       <Navbar faculty={faculty} />
       
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-8 flex-grow">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Welcome, {faculty?.name}</h1>
@@ -130,6 +131,8 @@ const Home = () => {
           </Card>
         </div>
       </div>
+      
+      <Footer />
     </div>
   );
 };

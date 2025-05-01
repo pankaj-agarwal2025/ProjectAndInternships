@@ -1,379 +1,309 @@
 
+import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/components/ui/use-toast';
+import { ProjectData, InternshipData } from '@/lib/supabase';
 
-interface ExcelImportOptions {
-  facultyCoordinator: string;
-  onClose: () => void;
-}
-
-interface Student {
-  roll_no: string;
-  name: string;
-  email?: string;
-  program?: string;
-}
-
-interface ProjectData {
-  group_no: string;
-  title: string;
-  domain?: string;
-  faculty_mentor?: string;
-  industry_mentor?: string;
-  session?: string;
-  year?: string;
-  semester?: string;
-  project_category?: string;
-  students: Student[];
+interface ExcelRow {
   [key: string]: any;
 }
 
-export const useExcelImport = ({ facultyCoordinator, onClose }: ExcelImportOptions) => {
-  const [file, setFile] = useState<File | null>(null);
-  const [previewData, setPreviewData] = useState<any[]>([]);
-  const [isImporting, setIsImporting] = useState(false);
-  const { toast } = useToast();
+interface ImportResult {
+  success: boolean;
+  total: number;
+  inserted: number;
+  updated: number;
+  errors?: string[];
+}
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      setFile(selectedFile);
-      parseExcelFile(selectedFile);
-    }
+const mapExcelToProject = (row: ExcelRow): ProjectData => {
+  // Map Excel columns to project fields
+  const project: ProjectData = {
+    group_no: row['Group No'] || '',
+    title: row['Title'] || '',
+    domain: row['Domain'] || undefined,
+    faculty_mentor: row['Faculty Mentor'] || undefined,
+    industry_mentor: row['Industry Mentor'] || undefined,
+    session: row['Session'] || undefined,
+    year: row['Year'] || undefined,
+    semester: row['Semester'] || undefined,
+    faculty_coordinator: row['Faculty Coordinator'] || undefined,
+    project_category: row['Project Category'] || undefined,
+    students: []
   };
 
-  const parseExcelFile = async (excelFile: File) => {
-    try {
-      const data = await excelFile.arrayBuffer();
-      const workbook = XLSX.read(data);
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
-      setPreviewData(jsonData.slice(0, 5)); // Preview first 5 rows
-    } catch (error) {
-      console.error('Error parsing Excel file:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to parse Excel file. Please check the format.',
-        variant: 'destructive',
+  // Map student data
+  for (let i = 1; i <= 4; i++) {
+    const rollNo = row[`Student ${i} Roll No`];
+    const name = row[`Student ${i} Name`];
+    
+    if (rollNo && name) {
+      project.students?.push({
+        roll_no: rollNo,
+        name: name,
+        email: row[`Student ${i} Email`] || undefined,
+        program: row[`Student ${i} Program`] || undefined
       });
     }
-  };
+  }
 
-  const normalizeKey = (key: string): string => {
-    // Convert camelCase or PascalCase to snake_case
-    const normalized = key
-      .replace(/([A-Z])/g, '_$1')
-      .toLowerCase()
-      .replace(/^_/, '')
-      .trim();
-    
-    // Handle specific mappings
-    const keyMappings: Record<string, string> = {
-      'roll_number': 'roll_no',
-      'roll_no_': 'roll_no',
-      'student_name': 'name',
-      'faculty_guide': 'faculty_mentor',
-      'industry_guide': 'industry_mentor',
-      'category': 'project_category',
-    };
-    
-    return keyMappings[normalized] || normalized;
-  };
+  return project;
+};
 
-  const groupDataByProject = (data: any[]): ProjectData[] => {
-    const projectsMap = new Map<string, ProjectData>();
-    
-    for (const row of data) {
-      const normalizedRow: Record<string, any> = {};
-      
-      // Normalize keys
-      Object.keys(row).forEach(key => {
-        const normalizedKey = normalizeKey(key);
-        normalizedRow[normalizedKey] = row[key];
-      });
-      
-      // Extract project data (required fields)
-      const project: Partial<ProjectData> = {
-        group_no: String(normalizedRow.group_no || ''),
-        title: String(normalizedRow.title || ''),
-        domain: normalizedRow.domain || undefined,
-        faculty_mentor: normalizedRow.faculty_mentor || undefined,
-        industry_mentor: normalizedRow.industry_mentor || undefined,
-        session: normalizedRow.session || undefined,
-        year: normalizedRow.year || undefined,
-        semester: normalizedRow.semester || undefined,
-        project_category: normalizedRow.project_category || undefined,
-        faculty_coordinator: facultyCoordinator,
+const mapExcelToInternship = (row: ExcelRow): InternshipData => {
+  // Map Excel columns to internship fields
+  return {
+    roll_no: row['Roll No'] || '',
+    name: row['Name'] || '',
+    email: row['Email'] || undefined,
+    phone_no: row['Phone No'] || undefined,
+    domain: row['Domain'] || undefined,
+    session: row['Session'] || undefined,
+    year: row['Year'] || undefined,
+    semester: row['Semester'] || undefined,
+    program: row['Program'] || undefined,
+    organization_name: row['Organization Name'] || undefined,
+    position: row['Position'] || undefined,
+    starting_date: row['Starting Date'] || undefined,
+    ending_date: row['Ending Date'] || undefined
+  };
+};
+
+const useExcelImport = () => {
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+
+  const importProjectMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const result: ImportResult = {
+        success: false,
+        total: 0,
+        inserted: 0,
+        updated: 0,
+        errors: []
       };
-      
-      // Extract evaluation fields if present
-      const evaluationFields = [
-        'initial_clarity_objectives', 'initial_background_feasibility', 'initial_usability_applications', 'initial_innovation_novelty',
-        'progress_data_extraction', 'progress_methodology', 'progress_implementation', 'progress_code_optimization', 'progress_user_interface',
-        'final_implementation', 'final_results', 'final_research_paper', 'final_project_completion'
-      ];
-      
-      evaluationFields.forEach(field => {
-        if (normalizedRow[field] !== undefined) {
-          project[field] = normalizedRow[field];
-        }
-      });
-      
-      // Extract document URLs if present
-      if (normalizedRow.progress_form_url) project.progress_form_url = normalizedRow.progress_form_url;
-      if (normalizedRow.presentation_url) project.presentation_url = normalizedRow.presentation_url;
-      if (normalizedRow.report_url) project.report_url = normalizedRow.report_url;
-      
-      // Extract student data
-      const student: Student = {
-        roll_no: String(normalizedRow.roll_no || ''),
-        name: String(normalizedRow.name || ''),
-        email: normalizedRow.email || undefined,
-        program: normalizedRow.program || undefined,
-      };
-      
-      // Skip if no roll number or name
-      if (!student.roll_no || !student.name) continue;
-      
-      // Find or create project entry
-      const projectKey = `${project.group_no}-${project.year}-${project.semester}`;
-      
-      if (!projectsMap.has(projectKey)) {
-        projectsMap.set(projectKey, {
-          ...project,
-          students: [],
-        });
-      }
-      
-      // Add student to project
-      const existingProject = projectsMap.get(projectKey);
-      if (existingProject) {
-        existingProject.students.push(student);
-      }
-    }
-    
-    return [...projectsMap.values()];
-  };
 
-  const handleImport = async () => {
-    if (!file || !facultyCoordinator) {
-      toast({
-        title: 'Missing Information',
-        description: 'Please select a file and ensure faculty coordinator is available.',
-        variant: 'destructive',
-      });
-      return;
-    }
-    
-    setIsImporting(true);
-    
-    try {
-      // Parse Excel data
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data);
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
-      
-      // Group data by projects
-      const projects = groupDataByProject(jsonData);
-      
-      // Process each project - check if it exists and update or create new
-      const results = [];
-      
-      for (const project of projects) {
-        // Skip invalid projects (no group number or title)
-        if (!project.group_no || !project.title) continue;
-        
-        // Check if project exists based on criteria
-        const { data: existingProjects, error: queryError } = await supabase
-          .from('projects')
-          .select('id, students(id, roll_no, name)')
-          .eq('group_no', project.group_no)
-          .eq('year', project.year || '')
-          .eq('semester', project.semester || '');
-          
-        if (queryError) {
-          console.error('Error checking existing project:', queryError);
-          continue;
-        }
-        
-        // Check if we have at least one student with matching name
-        let existingProjectId = null;
-        let studentMatches = false;
-        
-        if (existingProjects && existingProjects.length > 0) {
-          for (const existingProject of existingProjects) {
-            if (existingProject.students && existingProject.students.length > 0) {
-              // Check if any student in the existing project matches a student in the new data
-              for (const existingStudent of existingProject.students) {
-                if (project.students.some(s => 
-                  s.roll_no === existingStudent.roll_no || 
-                  s.name.toLowerCase() === existingStudent.name.toLowerCase())
-                ) {
-                  existingProjectId = existingProject.id;
-                  studentMatches = true;
-                  break;
-                }
-              }
-              if (studentMatches) break;
+      try {
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data);
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json<ExcelRow>(worksheet);
+
+        result.total = rows.length;
+
+        for (const row of rows) {
+          try {
+            const projectData = mapExcelToProject(row);
+
+            // Skip if required fields are missing
+            if (!projectData.group_no || !projectData.title) {
+              result.errors?.push(`Missing required fields (Group No or Title) in row: ${JSON.stringify(row)}`);
+              continue;
             }
-          }
-        }
-        
-        if (existingProjectId) {
-          // Update existing project with new data
-          const projectUpdates: Record<string, any> = {};
-          
-          // Only include fields that have values to avoid overwriting with null
-          Object.keys(project).forEach(key => {
-            if (project[key] !== undefined && key !== 'students') {
-              projectUpdates[key] = project[key];
-            }
-          });
-          
-          if (Object.keys(projectUpdates).length > 0) {
-            const { error: updateError } = await supabase
+
+            // Check if this project exists already (for update)
+            const { data: existingProjects } = await supabase
               .from('projects')
-              .update(projectUpdates)
-              .eq('id', existingProjectId);
-              
-            if (updateError) {
-              console.error('Error updating project:', updateError);
-              continue;
-            }
-          }
-          
-          // Update or add students
-          for (const student of project.students) {
-            if (!student.roll_no || !student.name) continue;
+              .select('id, group_no, year, semester')
+              .eq('group_no', projectData.group_no)
+              .eq('year', projectData.year || '')
+              .eq('semester', projectData.semester || '');
+
+            let projectId;
             
-            // Check if student exists
-            const { data: existingStudents, error: studentQueryError } = await supabase
-              .from('students')
-              .select('id')
-              .eq('group_id', existingProjectId)
-              .eq('roll_no', student.roll_no);
+            if (existingProjects && existingProjects.length > 0) {
+              // Update existing project
+              const existingProject = existingProjects[0];
+              projectId = existingProject.id;
               
-            if (studentQueryError) {
-              console.error('Error checking existing student:', studentQueryError);
-              continue;
-            }
-            
-            if (existingStudents && existingStudents.length > 0) {
-              // Update existing student
-              const studentUpdates: Record<string, any> = {};
-              Object.keys(student).forEach(key => {
-                if (student[key] !== undefined) {
-                  studentUpdates[key] = student[key];
+              // Only update non-null fields
+              const updateData: Record<string, any> = {};
+              Object.entries(projectData).forEach(([key, value]) => {
+                if (value !== undefined && key !== 'students') {
+                  updateData[key] = value;
                 }
               });
               
-              if (Object.keys(studentUpdates).length > 0) {
+              if (Object.keys(updateData).length > 0) {
                 await supabase
-                  .from('students')
-                  .update(studentUpdates)
-                  .eq('id', existingStudents[0].id);
+                  .from('projects')
+                  .update(updateData)
+                  .eq('id', projectId);
               }
-            } else {
-              // Add new student to existing project
-              await supabase
-                .from('students')
-                .insert({
-                  ...student,
-                  group_id: existingProjectId
-                });
-            }
-          }
-          
-          results.push({
-            action: 'updated',
-            group_no: project.group_no
-          });
-        } else {
-          // Insert new project
-          const { data: newProject, error: insertError } = await supabase
-            .from('projects')
-            .insert({
-              group_no: project.group_no,
-              title: project.title,
-              domain: project.domain,
-              faculty_mentor: project.faculty_mentor,
-              industry_mentor: project.industry_mentor,
-              session: project.session,
-              year: project.year,
-              semester: project.semester,
-              faculty_coordinator: facultyCoordinator,
-              project_category: project.project_category,
-              progress_form_url: project.progress_form_url,
-              presentation_url: project.presentation_url,
-              report_url: project.report_url,
-              initial_clarity_objectives: project.initial_clarity_objectives,
-              initial_background_feasibility: project.initial_background_feasibility,
-              initial_usability_applications: project.initial_usability_applications,
-              initial_innovation_novelty: project.initial_innovation_novelty,
-              progress_data_extraction: project.progress_data_extraction,
-              progress_methodology: project.progress_methodology,
-              progress_implementation: project.progress_implementation,
-              progress_code_optimization: project.progress_code_optimization,
-              progress_user_interface: project.progress_user_interface,
-              final_implementation: project.final_implementation,
-              final_results: project.final_results,
-              final_research_paper: project.final_research_paper,
-              final_project_completion: project.final_project_completion
-            })
-            .select();
-            
-          if (insertError) {
-            console.error('Error inserting new project:', insertError);
-            continue;
-          }
-          
-          // Insert students for new project
-          if (newProject && newProject.length > 0) {
-            for (const student of project.students) {
-              if (!student.roll_no || !student.name) continue;
               
-              await supabase
-                .from('students')
+              result.updated++;
+            } else {
+              // Insert new project
+              const { data: newProject, error } = await supabase
+                .from('projects')
                 .insert({
-                  ...student,
-                  group_id: newProject[0].id
-                });
+                  group_no: projectData.group_no,
+                  title: projectData.title,
+                  domain: projectData.domain,
+                  faculty_mentor: projectData.faculty_mentor,
+                  industry_mentor: projectData.industry_mentor,
+                  session: projectData.session,
+                  year: projectData.year,
+                  semester: projectData.semester,
+                  faculty_coordinator: projectData.faculty_coordinator,
+                  project_category: projectData.project_category
+                })
+                .select('id')
+                .single();
+
+              if (error) throw error;
+              
+              projectId = newProject.id;
+              result.inserted++;
             }
-            
-            results.push({
-              action: 'inserted',
-              group_no: project.group_no
-            });
+
+            // Handle students
+            if (projectId && projectData.students && projectData.students.length > 0) {
+              // First check if students exist for this project
+              const { data: existingStudents } = await supabase
+                .from('students')
+                .select('id, roll_no, name')
+                .eq('group_id', projectId);
+                
+              for (const student of projectData.students) {
+                const existingStudent = existingStudents?.find(s => 
+                  s.roll_no === student.roll_no || s.name === student.name
+                );
+                
+                if (existingStudent) {
+                  // Update existing student
+                  const updateData: Record<string, any> = {};
+                  Object.entries(student).forEach(([key, value]) => {
+                    if (value !== undefined) {
+                      updateData[key] = value;
+                    }
+                  });
+                  
+                  if (Object.keys(updateData).length > 0) {
+                    await supabase
+                      .from('students')
+                      .update(updateData)
+                      .eq('id', existingStudent.id);
+                  }
+                } else {
+                  // Insert new student
+                  await supabase
+                    .from('students')
+                    .insert({
+                      group_id: projectId,
+                      roll_no: student.roll_no,
+                      name: student.name,
+                      email: student.email,
+                      program: student.program
+                    });
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error processing row:', error);
+            result.errors?.push(`Error processing row: ${JSON.stringify(row)} - ${String(error)}`);
           }
         }
+
+        result.success = true;
+      } catch (error) {
+        console.error('Error importing Excel file:', error);
+        result.errors?.push(`Error importing file: ${String(error)}`);
       }
-      
-      toast({
-        title: 'Import Successful',
-        description: `Processed ${results.length} projects (${results.filter(r => r.action === 'inserted').length} new, ${results.filter(r => r.action === 'updated').length} updated)`,
-      });
-      
-      onClose();
-    } catch (error) {
-      console.error('Error importing Excel data:', error);
-      toast({
-        title: 'Import Failed',
-        description: 'An error occurred while importing the data. Please check the Excel format.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsImporting(false);
+
+      setImportResult(result);
+      return result;
     }
-  };
+  });
+
+  const importInternshipMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const result: ImportResult = {
+        success: false,
+        total: 0,
+        inserted: 0,
+        updated: 0,
+        errors: []
+      };
+
+      try {
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data);
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json<ExcelRow>(worksheet);
+
+        result.total = rows.length;
+
+        for (const row of rows) {
+          try {
+            const internshipData = mapExcelToInternship(row);
+
+            // Skip if required fields are missing
+            if (!internshipData.roll_no || !internshipData.name) {
+              result.errors?.push(`Missing required fields (Roll No or Name) in row: ${JSON.stringify(row)}`);
+              continue;
+            }
+
+            // Check if this internship exists already (for update)
+            const { data: existingInternships } = await supabase
+              .from('internships')
+              .select('id, roll_no, name, organization_name, position')
+              .eq('roll_no', internshipData.roll_no)
+              .eq('name', internshipData.name || '')
+              .eq('organization_name', internshipData.organization_name || '')
+              .eq('position', internshipData.position || '');
+
+            if (existingInternships && existingInternships.length > 0) {
+              // Update existing internship
+              const existingInternship = existingInternships[0];
+              
+              // Only update non-null fields
+              const updateData: Record<string, any> = {};
+              Object.entries(internshipData).forEach(([key, value]) => {
+                if (value !== undefined) {
+                  updateData[key] = value;
+                }
+              });
+              
+              if (Object.keys(updateData).length > 0) {
+                await supabase
+                  .from('internships')
+                  .update(updateData)
+                  .eq('id', existingInternship.id);
+              }
+              
+              result.updated++;
+            } else {
+              // Insert new internship
+              await supabase
+                .from('internships')
+                .insert(internshipData);
+                
+              result.inserted++;
+            }
+          } catch (error) {
+            console.error('Error processing row:', error);
+            result.errors?.push(`Error processing row: ${JSON.stringify(row)} - ${String(error)}`);
+          }
+        }
+
+        result.success = true;
+      } catch (error) {
+        console.error('Error importing Excel file:', error);
+        result.errors?.push(`Error importing file: ${String(error)}`);
+      }
+
+      setImportResult(result);
+      return result;
+    }
+  });
 
   return {
-    file,
-    isImporting,
-    previewData,
-    handleFileChange,
-    handleImport,
+    importResult,
+    importProjectMutation,
+    importInternshipMutation,
+    resetResult: () => setImportResult(null)
   };
 };
+
+export default useExcelImport;

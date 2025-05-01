@@ -21,7 +21,17 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Search, UserPlus, Loader2 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Search, UserPlus, Loader2, Trash2, Users } from 'lucide-react';
 import { Faculty } from '@/lib/supabase';
 
 interface AdminPanelProps {
@@ -33,6 +43,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentFaculty }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddTeacherModal, setShowAddTeacherModal] = useState(false);
+  const [showTeachersList, setShowTeachersList] = useState(false);
   const [newTeacher, setNewTeacher] = useState({
     username: '',
     password: '',
@@ -40,11 +51,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentFaculty }) => {
     role: 'teacher'
   });
   const [isAddingTeacher, setIsAddingTeacher] = useState(false);
+  const [teacherToDelete, setTeacherToDelete] = useState<Faculty | null>(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchTeachers();
-  }, []);
+    if (showTeachersList) {
+      fetchTeachers();
+    }
+  }, [showTeachersList]);
 
   const fetchTeachers = async () => {
     setIsLoading(true);
@@ -128,8 +143,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentFaculty }) => {
       });
       setShowAddTeacherModal(false);
       
-      // Refresh teacher list
-      fetchTeachers();
+      // Refresh teacher list if it's showing
+      if (showTeachersList) {
+        fetchTeachers();
+      }
     } catch (error) {
       console.error('Error adding new teacher:', error);
       toast({
@@ -139,6 +156,44 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentFaculty }) => {
       });
     } finally {
       setIsAddingTeacher(false);
+    }
+  };
+
+  const handleDeleteTeacher = (teacher: Faculty) => {
+    setTeacherToDelete(teacher);
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDeleteTeacher = async () => {
+    if (!teacherToDelete) return;
+    
+    try {
+      const { error } = await supabase
+        .from('faculties')
+        .delete()
+        .eq('id', teacherToDelete.id);
+
+      if (error) {
+        throw error;
+      }
+
+      toast({
+        title: 'Success',
+        description: `Teacher "${teacherToDelete.name}" has been deleted.`,
+      });
+      
+      // Refresh teacher list
+      fetchTeachers();
+    } catch (error) {
+      console.error('Error deleting teacher:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete teacher. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setTeacherToDelete(null);
+      setShowDeleteDialog(false);
     }
   };
 
@@ -162,69 +217,91 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentFaculty }) => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Admin Panel</h2>
-        <Button onClick={() => setShowAddTeacherModal(true)}>
-          <UserPlus className="mr-2 h-4 w-4" />
-          Add New Teacher
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            onClick={() => setShowTeachersList(!showTeachersList)}
+          >
+            <Users className="mr-2 h-4 w-4" />
+            {showTeachersList ? 'Hide Teachers' : 'View Teachers'}
+          </Button>
+          <Button onClick={() => setShowAddTeacherModal(true)}>
+            <UserPlus className="mr-2 h-4 w-4" />
+            Add New Teacher
+          </Button>
+        </div>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-6">
-        <h3 className="text-lg font-medium">Manage Teachers</h3>
-        
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-          <Input
-            type="text"
-            placeholder="Search teachers..."
-            className="pl-10"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-
-        {isLoading ? (
-          <div className="flex justify-center py-8">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      {showTeachersList && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-6">
+          <h3 className="text-lg font-medium">Manage Teachers</h3>
+          
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <Input
+              type="text"
+              placeholder="Search teachers..."
+              className="pl-10"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Username</TableHead>
-                  <TableHead>Role</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredTeachers.length === 0 ? (
+
+          {isLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={3} className="text-center py-4">
-                      No teachers found.
-                    </TableCell>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Username</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ) : (
-                  filteredTeachers.map((teacher) => (
-                    <TableRow key={teacher.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                      <TableCell>{teacher.name}</TableCell>
-                      <TableCell>{teacher.username}</TableCell>
-                      <TableCell>
-                        <span className={`px-2 py-1 rounded-full text-xs ${
-                          teacher.role === 'admin' 
-                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' 
-                            : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
-                        }`}>
-                          {teacher.role || 'teacher'}
-                        </span>
+                </TableHeader>
+                <TableBody>
+                  {filteredTeachers.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center py-4">
+                        No teachers found.
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </div>
+                  ) : (
+                    filteredTeachers.map((teacher) => (
+                      <TableRow key={teacher.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <TableCell>{teacher.name}</TableCell>
+                        <TableCell>{teacher.username}</TableCell>
+                        <TableCell>
+                          <span className={`px-2 py-1 rounded-full text-xs ${
+                            teacher.role === 'admin' 
+                              ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' 
+                              : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
+                          }`}>
+                            {teacher.role || 'teacher'}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button 
+                            variant="destructive" 
+                            size="sm"
+                            onClick={() => handleDeleteTeacher(teacher)}
+                            disabled={teacher.id === currentFaculty.id}
+                          >
+                            <Trash2 className="h-4 w-4 mr-1" /> Delete
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Add Teacher Modal */}
       <Dialog open={showAddTeacherModal} onOpenChange={setShowAddTeacherModal}>
@@ -290,6 +367,30 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentFaculty }) => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Teacher Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the teacher account for "{teacherToDelete?.name}". 
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setShowDeleteDialog(false)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmDeleteTeacher}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

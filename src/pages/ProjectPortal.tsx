@@ -10,6 +10,7 @@ import ImportExcelModal from '@/components/ImportExcelModal';
 import { Faculty, setupDatabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
 import { FilePlus2, Download } from 'lucide-react';
+import Footer from '@/components/footer';
 
 const ProjectPortal = () => {
   const navigate = useNavigate();
@@ -135,6 +136,8 @@ const ProjectPortal = () => {
         isOpen={showImportExcelModal}
         onClose={() => setShowImportExcelModal(false)}
       />
+
+      <Footer />
     </div>
   );
 };
