@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, Upload } from 'lucide-react';
 import ImportFilters from './excel-import/ImportFilters';
-import { useExcelImport } from '@/hooks/useExcelImport';
+import useExcelImport from '@/hooks/useExcelImport';
 
 interface ImportExcelModalProps {
   isOpen: boolean;

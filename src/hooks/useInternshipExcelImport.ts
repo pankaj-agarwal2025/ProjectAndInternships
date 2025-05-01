@@ -1,15 +1,15 @@
 
 import { useState } from 'react';
 import * as XLSX from 'xlsx';
-import { processProjectsExcel } from '@/lib/supabase';
+import { processInternshipsExcel } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
 
-interface UseExcelImportProps {
+interface UseInternshipExcelImportProps {
   facultyCoordinator: string;
   onClose: () => void;
 }
 
-const useExcelImport = ({ facultyCoordinator, onClose }: UseExcelImportProps) => {
+const useInternshipExcelImport = ({ facultyCoordinator, onClose }: UseInternshipExcelImportProps) => {
   const [file, setFile] = useState<File | null>(null);
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [isImporting, setIsImporting] = useState(false);
@@ -47,72 +47,25 @@ const useExcelImport = ({ facultyCoordinator, onClose }: UseExcelImportProps) =>
   };
 
   const processExcelData = (jsonData: any[]) => {
-    // Convert Excel data to structured project data
-    const projects: any[] = [];
+    // Convert Excel data to structured internship data
+    const internships = jsonData.map(row => ({
+      roll_no: row['Roll No'] || '',
+      name: row['Name'] || '',
+      email: row['Email'],
+      phone_no: row['Phone No'],
+      domain: row['Domain'],
+      session: row['Session'],
+      year: row['Year'],
+      semester: row['Semester'],
+      program: row['Program'],
+      organization_name: row['Organization Name'] || '',
+      position: row['Position'] || '',
+      starting_date: row['Starting Date'],
+      ending_date: row['Ending Date'],
+      faculty_coordinator: facultyCoordinator
+    }));
     
-    // Group by project
-    const projectGroups: Record<string, any> = {};
-    
-    jsonData.forEach((row) => {
-      const groupKey = `${row['Group No'] || ''}:${row['Year'] || ''}:${row['Semester'] || ''}`;
-      
-      if (!projectGroups[groupKey]) {
-        projectGroups[groupKey] = {
-          group_no: row['Group No'],
-          title: row['Title'],
-          domain: row['Domain'],
-          faculty_mentor: row['Faculty Mentor'],
-          industry_mentor: row['Industry Mentor'],
-          session: row['Session'],
-          year: row['Year'],
-          semester: row['Semester'],
-          project_category: row['Project Category'],
-          students: []
-        };
-      }
-      
-      // Add student if Roll No exists
-      if (row['Roll No']) {
-        projectGroups[groupKey].students.push({
-          roll_no: row['Roll No'],
-          name: row['Name'],
-          email: row['Email'],
-          program: row['Program']
-        });
-      }
-      
-      // Add evaluation fields if they exist
-      for (const field of ['Clarity of Objectives', 'Background & Feasibility Study', 
-                          'Usability/Applications', 'Innovation/Novelty']) {
-        if (row[field] !== undefined) {
-          const key = `initial_${field.toLowerCase().replace(/[&\s]/g, '_')}`;
-          projectGroups[groupKey][key] = parseFloat(row[field]);
-        }
-      }
-      
-      for (const field of ['Data Extraction & Processing', 'Methodology', 'Implementation', 
-                           'Code Optimization', 'User Interface']) {
-        if (row[field] !== undefined) {
-          const key = `progress_${field.toLowerCase().replace(/[&\s]/g, '_')}`;
-          projectGroups[groupKey][key] = parseFloat(row[field]);
-        }
-      }
-      
-      for (const field of ['Implementation', 'Results', 'Research Paper & Report', 
-                          'Project Completion and Validation']) {
-        if (row[field] !== undefined) {
-          const key = `final_${field.toLowerCase().replace(/[&\s]/g, '_')}`;
-          projectGroups[groupKey][key] = parseFloat(row[field]);
-        }
-      }
-    });
-    
-    // Convert groups to array
-    for (const key in projectGroups) {
-      projects.push(projectGroups[key]);
-    }
-    
-    return projects;
+    return internships;
   };
 
   const handleImport = async () => {
@@ -152,11 +105,11 @@ const useExcelImport = ({ facultyCoordinator, onClose }: UseExcelImportProps) =>
           const processedData = processExcelData(jsonData);
           
           // Save to database
-          await processProjectsExcel(processedData, facultyCoordinator);
+          await processInternshipsExcel(processedData, facultyCoordinator);
           
           toast({
             title: 'Import Successful',
-            description: `Successfully imported ${processedData.length} projects.`,
+            description: `Successfully imported ${processedData.length} internships.`,
           });
           
           onClose();
@@ -192,4 +145,4 @@ const useExcelImport = ({ facultyCoordinator, onClose }: UseExcelImportProps) =>
   };
 };
 
-export default useExcelImport;
+export default useInternshipExcelImport;

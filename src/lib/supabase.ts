@@ -20,6 +20,30 @@ export interface Student {
   program: string;
 }
 
+export interface Internship {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  starting_date?: string;
+  ending_date?: string;
+  internship_duration?: number;
+  roll_no: string;
+  name: string;
+  email?: string;
+  phone_no?: string;
+  domain?: string;
+  session?: string;
+  year?: string;
+  semester?: string;
+  program?: string;
+  organization_name?: string;
+  position?: string;
+  offer_letter_url?: string;
+  noc_url?: string;
+  ppo_url?: string;
+  faculty_coordinator?: string;
+}
+
 export interface Project {
   id: string;
   created_at: string;
@@ -119,92 +143,40 @@ export const setupDatabase = async () => {
 
 const createTables = async () => {
   try {
-    // Create faculties table
-    await supabase.query(`
-      CREATE TABLE IF NOT EXISTS faculties (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
-        username TEXT NOT NULL UNIQUE,
-        password TEXT NOT NULL,
-        name TEXT NOT NULL,
-        role TEXT DEFAULT 'teacher'
-      );
-    `);
+    // Create faculties table using SQL via rpc
+    const { error: facultiesError } = await supabase.rpc('create_faculties_table');
+    
+    if (facultiesError) {
+      console.error('Error creating faculties table:', facultiesError);
+    }
 
-    // Create projects table
-    await supabase.query(`
-      CREATE TABLE IF NOT EXISTS projects (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
-        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
-        group_no TEXT NOT NULL,
-        title TEXT NOT NULL,
-        domain TEXT,
-        faculty_mentor TEXT,
-        industry_mentor TEXT,
-        session TEXT,
-        year TEXT,
-        semester TEXT,
-        faculty_coordinator TEXT,
-        progress_form_url TEXT,
-        presentation_url TEXT,
-        report_url TEXT,
-        initial_evaluation TEXT,
-        progress_evaluation TEXT,
-        final_evaluation TEXT,
-        project_category TEXT,
-        initial_clarity_objectives NUMERIC,
-        initial_background_feasibility NUMERIC,
-        initial_usability_applications NUMERIC,
-        initial_innovation_novelty NUMERIC,
-        initial_total NUMERIC,
-        progress_data_extraction NUMERIC,
-        progress_methodology NUMERIC,
-        progress_implementation NUMERIC,
-        progress_code_optimization NUMERIC,
-        progress_user_interface NUMERIC,
-        progress_total NUMERIC,
-        final_implementation NUMERIC,
-        final_results NUMERIC,
-        final_research_paper NUMERIC,
-        final_project_completion NUMERIC,
-        final_total NUMERIC
-      );
-    `);
+    // Create projects table using SQL via rpc
+    const { error: projectsError } = await supabase.rpc('create_projects_table');
+    
+    if (projectsError) {
+      console.error('Error creating projects table:', projectsError);
+    }
 
-    // Create students table
-    await supabase.query(`
-      CREATE TABLE IF NOT EXISTS students (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        group_id UUID REFERENCES projects(id),
-        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
-        roll_no TEXT NOT NULL,
-        name TEXT NOT NULL,
-        email TEXT,
-        program TEXT
-      );
-    `);
+    // Create students table using SQL via rpc
+    const { error: studentsError } = await supabase.rpc('create_students_table');
+    
+    if (studentsError) {
+      console.error('Error creating students table:', studentsError);
+    }
 
-    // Create dynamic columns table
-    await supabase.query(`
-      CREATE TABLE IF NOT EXISTS dynamic_columns (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
-        name TEXT NOT NULL,
-        type TEXT NOT NULL
-      );
-    `);
+    // Create dynamic columns table using SQL via rpc
+    const { error: dynamicColumnsError } = await supabase.rpc('create_dynamic_columns_table');
+    
+    if (dynamicColumnsError) {
+      console.error('Error creating dynamic columns table:', dynamicColumnsError);
+    }
 
-    // Create dynamic column values table
-    await supabase.query(`
-      CREATE TABLE IF NOT EXISTS dynamic_column_values (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        column_id UUID,
-        project_id UUID,
-        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
-        value TEXT
-      );
-    `);
+    // Create dynamic column values table using SQL via rpc
+    const { error: dynamicColumnValuesError } = await supabase.rpc('create_dynamic_column_values_table');
+    
+    if (dynamicColumnValuesError) {
+      console.error('Error creating dynamic column values table:', dynamicColumnValuesError);
+    }
 
     return true;
   } catch (error) {
@@ -320,4 +292,317 @@ export const uploadFile = async (file: File, bucket: string, path: string) => {
     .getPublicUrl(data?.path || path);
 
   return urlData?.publicUrl;
+};
+
+// Add function for project management
+export const addProject = async (projectData: ProjectData, students: any[]) => {
+  try {
+    // First, insert the project
+    const { data: newProject, error: projectError } = await supabase
+      .from('projects')
+      .insert(projectData)
+      .select();
+
+    if (projectError) {
+      console.error('Error adding project:', projectError);
+      throw projectError;
+    }
+
+    if (!newProject || newProject.length === 0) {
+      throw new Error('No project data returned after insert');
+    }
+
+    const projectId = newProject[0].id;
+
+    // Then, insert each student with the project ID
+    for (const student of students) {
+      const { error: studentError } = await supabase
+        .from('students')
+        .insert({
+          group_id: projectId,
+          roll_no: student.roll_no,
+          name: student.name,
+          email: student.email,
+          program: student.program
+        });
+
+      if (studentError) {
+        console.error('Error adding student:', studentError);
+        throw studentError;
+      }
+    }
+
+    return newProject[0];
+  } catch (error) {
+    console.error('Error in addProject:', error);
+    throw error;
+  }
+};
+
+// Internship dynamic columns functions
+export const getInternshipDynamicColumns = async () => {
+  const { data, error } = await supabase
+    .from('internship_dynamic_columns')
+    .select('*')
+    .order('name');
+
+  if (error) {
+    console.error('Error fetching internship dynamic columns:', error);
+    throw error;
+  }
+
+  return data || [];
+};
+
+export const addInternshipDynamicColumn = async (name: string, type: string) => {
+  const { data, error } = await supabase
+    .from('internship_dynamic_columns')
+    .insert({ name, type })
+    .select();
+
+  if (error) {
+    console.error('Error adding internship dynamic column:', error);
+    throw error;
+  }
+
+  return data?.[0];
+};
+
+export const deleteInternshipDynamicColumn = async (columnId: string) => {
+  // First delete all values associated with this column
+  await supabase
+    .from('internship_dynamic_column_values')
+    .delete()
+    .eq('column_id', columnId);
+
+  // Then delete the column itself
+  const { error } = await supabase
+    .from('internship_dynamic_columns')
+    .delete()
+    .eq('id', columnId);
+
+  if (error) {
+    console.error('Error deleting internship dynamic column:', error);
+    throw error;
+  }
+
+  return true;
+};
+
+export const getInternshipDynamicColumnValues = async (internshipId: string) => {
+  const { data, error } = await supabase
+    .from('internship_dynamic_column_values')
+    .select(`
+      *,
+      internship_dynamic_columns (
+        id,
+        name,
+        type
+      )
+    `)
+    .eq('internship_id', internshipId);
+
+  if (error) {
+    console.error('Error fetching internship dynamic column values:', error);
+    throw error;
+  }
+
+  return data || [];
+};
+
+export const addInternshipDynamicColumnValue = async (columnId: string, internshipId: string, value: string) => {
+  const { data, error } = await supabase
+    .from('internship_dynamic_column_values')
+    .insert({
+      column_id: columnId,
+      internship_id: internshipId,
+      value: value
+    })
+    .select();
+
+  if (error) {
+    console.error('Error adding internship dynamic column value:', error);
+    throw error;
+  }
+
+  return data?.[0];
+};
+
+// Excel processing functions
+export const processProjectsExcel = async (excelData: any[], facultyCoordinator: string) => {
+  try {
+    // Logic to process Excel data and update/create projects
+    // Implementation would depend on your specific requirements
+    
+    // For each row in Excel
+    for (const row of excelData) {
+      // Check if this project already exists
+      const { data: existingProjects } = await supabase
+        .from('projects')
+        .select('*, students(*)')
+        .eq('group_no', row.group_no)
+        .eq('year', row.year)
+        .eq('semester', row.semester);
+        
+      if (existingProjects && existingProjects.length > 0) {
+        // Update existing project with new data
+        const projectId = existingProjects[0].id;
+        
+        // Only update fields that are present in the Excel
+        const updateData: Partial<Project> = {};
+        for (const key in row) {
+          if (row[key] !== undefined && row[key] !== null && key !== 'students') {
+            updateData[key as keyof Project] = row[key];
+          }
+        }
+        
+        if (Object.keys(updateData).length > 0) {
+          await supabase
+            .from('projects')
+            .update(updateData)
+            .eq('id', projectId);
+        }
+        
+        // Handle students if present
+        if (row.students && Array.isArray(row.students)) {
+          for (const student of row.students) {
+            const { data: existingStudent } = await supabase
+              .from('students')
+              .select('*')
+              .eq('group_id', projectId)
+              .eq('roll_no', student.roll_no);
+              
+            if (existingStudent && existingStudent.length > 0) {
+              // Update student
+              await supabase
+                .from('students')
+                .update({
+                  name: student.name,
+                  email: student.email,
+                  program: student.program
+                })
+                .eq('id', existingStudent[0].id);
+            } else {
+              // Add new student to existing project
+              await supabase
+                .from('students')
+                .insert({
+                  group_id: projectId,
+                  roll_no: student.roll_no,
+                  name: student.name,
+                  email: student.email,
+                  program: student.program
+                });
+            }
+          }
+        }
+      } else {
+        // Create new project
+        const projectData = {
+          group_no: row.group_no,
+          title: row.title || 'Untitled Project',
+          domain: row.domain,
+          faculty_mentor: row.faculty_mentor,
+          industry_mentor: row.industry_mentor,
+          session: row.session,
+          year: row.year,
+          semester: row.semester,
+          faculty_coordinator: facultyCoordinator,
+          project_category: row.project_category
+        };
+        
+        const { data: newProject } = await supabase
+          .from('projects')
+          .insert(projectData)
+          .select();
+          
+        if (newProject && newProject.length > 0) {
+          const projectId = newProject[0].id;
+          
+          // Add students if present
+          if (row.students && Array.isArray(row.students)) {
+            for (const student of row.students) {
+              await supabase
+                .from('students')
+                .insert({
+                  group_id: projectId,
+                  roll_no: student.roll_no,
+                  name: student.name,
+                  email: student.email,
+                  program: student.program
+                });
+            }
+          }
+        }
+      }
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error processing Excel data:', error);
+    throw error;
+  }
+};
+
+export const processInternshipsExcel = async (excelData: any[], facultyCoordinator: string) => {
+  try {
+    // For each row in Excel
+    for (const row of excelData) {
+      // Check if this internship already exists
+      const { data: existingInternships } = await supabase
+        .from('internships')
+        .select('*')
+        .eq('roll_no', row.roll_no)
+        .eq('name', row.name)
+        .eq('organization_name', row.organization_name)
+        .eq('position', row.position);
+        
+      if (existingInternships && existingInternships.length > 0) {
+        // Update existing internship with new data
+        const internshipId = existingInternships[0].id;
+        
+        // Only update fields that are present in the Excel
+        const updateData: Partial<Internship> = {};
+        for (const key in row) {
+          if (row[key] !== undefined && row[key] !== null) {
+            updateData[key as keyof Internship] = row[key];
+          }
+        }
+        
+        if (Object.keys(updateData).length > 0) {
+          await supabase
+            .from('internships')
+            .update(updateData)
+            .eq('id', internshipId);
+        }
+      } else {
+        // Create new internship
+        const internshipData = {
+          roll_no: row.roll_no,
+          name: row.name,
+          email: row.email,
+          phone_no: row.phone_no,
+          domain: row.domain,
+          session: row.session,
+          year: row.year,
+          semester: row.semester,
+          program: row.program,
+          organization_name: row.organization_name,
+          position: row.position,
+          starting_date: row.starting_date,
+          ending_date: row.ending_date,
+          faculty_coordinator: facultyCoordinator
+        };
+        
+        await supabase
+          .from('internships')
+          .insert(internshipData);
+      }
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error processing internships Excel data:', error);
+    throw error;
+  }
 };

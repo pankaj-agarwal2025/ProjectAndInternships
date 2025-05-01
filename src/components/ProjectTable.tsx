@@ -1032,9 +1032,15 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
     
     setIsSaving(true);
     try {
+      // Create a copy of editedProject without the students array to avoid type errors
+      const projectToUpdate = { ...editedProject };
+      if ('students' in projectToUpdate) {
+        delete projectToUpdate.students;
+      }
+      
       await supabase
         .from('projects')
-        .update(editedProject)
+        .update(projectToUpdate)
         .eq('id', currentEvaluationProject.id);
       
       fetchProjects();
