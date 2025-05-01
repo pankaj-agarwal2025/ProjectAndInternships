@@ -36,7 +36,7 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
       semester: semester || '',
       session: session || '',
       organization_name: organization || '',
-      program: program || '',
+      program: program === 'all_programs' ? '' : program,
       ...dynamicFilters,
     };
     onFilterChange(filters);
@@ -133,7 +133,7 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
                   <SelectValue placeholder="All Programs" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Programs</SelectItem>
+                  <SelectItem value="all_programs">All Programs</SelectItem>
                   <SelectItem value="BSc CS">BSc CS</SelectItem>
                   <SelectItem value="BSc DS">BSc DS</SelectItem>
                   <SelectItem value="BSc Cyber">BSc Cyber</SelectItem>
@@ -164,7 +164,7 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
                   <SelectValue placeholder="All Semesters" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Semesters</SelectItem>
+                  <SelectItem value="all_semesters">All Semesters</SelectItem>
                   <SelectItem value="1">Semester 1</SelectItem>
                   <SelectItem value="2">Semester 2</SelectItem>
                   <SelectItem value="3">Semester 3</SelectItem>
