@@ -39,6 +39,8 @@ const ImportExcelModal: React.FC<ImportExcelModalProps> = ({ isOpen, onClose }) 
   } = useExcelImport({
     onDataReady: setExcelData,
     facultyCoordinator: facultyData?.name || '',
+    minStudents,
+    maxStudents,
     onClose
   });
 

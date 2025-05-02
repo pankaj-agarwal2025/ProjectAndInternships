@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import Navbar from '@/components/Navbar';
-import ProjectTable from '@/components/ProjectTable';
+import ProjectTable from '@/components/project-table';
 import ProjectFilters from '@/components/ProjectFilters';
 import AddProjectModal from '@/components/AddProjectModal';
 import ImportExcelModal from '@/components/ImportExcelModal';
