@@ -1,164 +1,98 @@
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import * as XLSX from 'xlsx';
-import { processProjectsExcel } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
 
-export function useExcelImport({ facultyCoordinator, onClose }: { facultyCoordinator: string; onClose: () => void }) {
-  const [file, setFile] = useState<File | null>(null);
-  const [isImporting, setIsImporting] = useState(false);
-  const [importProgress, setImportProgress] = useState(0);
+interface UseExcelImportProps {
+  onDataReady: (data: any[]) => void;
+  validateRow?: (row: any) => boolean;
+  transformRow?: (row: any) => any;
+}
+
+export function useExcelImport({ onDataReady, validateRow, transformRow }: UseExcelImportProps) {
+  const [isLoading, setIsLoading] = useState(false);
   const [previewData, setPreviewData] = useState<any[]>([]);
+  const [file, setFile] = useState<File | null>(null);
   const { toast } = useToast();
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
-    
-    setFile(selectedFile);
-    
-    try {
-      // Read the Excel file to preview
-      const data = await selectedFile.arrayBuffer();
-      const workbook = XLSX.read(data, { type: 'array' });
-      
-      // Get the first sheet
-      const firstSheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheetName];
-      
-      // Convert to JSON
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
-      
-      // Only show first 5 rows for preview
-      setPreviewData(jsonData.slice(0, 5));
-    } catch (error) {
-      console.error('Error previewing Excel:', error);
-      toast({
-        title: 'Preview Failed',
-        description: error instanceof Error ? error.message : 'An error occurred previewing the file.',
-        variant: 'destructive',
-      });
-      setFile(null);
-    }
-  };
 
-  const handleImport = async () => {
-    if (!file || !facultyCoordinator) {
-      toast({
-        title: 'Import Failed',
-        description: 'Missing required information for import.',
-        variant: 'destructive',
-      });
-      return false;
-    }
-    
-    setIsImporting(true);
-    setImportProgress(10);
-    
-    try {
-      // Read the Excel file
-      const data = await selectedFile.arrayBuffer();
-      const workbook = XLSX.read(data, { type: 'array' });
-      setImportProgress(30);
-      
-      // Get the first sheet
-      const firstSheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheetName];
-      
-      // Convert to JSON
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
-      setImportProgress(50);
-      
-      if (!Array.isArray(jsonData) || jsonData.length === 0) {
-        throw new Error('No data found in the Excel file.');
-      }
-      
-      // Process the data
-      console.log('Processing Excel data:', jsonData);
-      
-      // Extract and process student data if present in a specific format
-      const projectsWithStudents = jsonData.map((project: any) => {
-        // Check if there are student columns
-        const studentKeys = Object.keys(project).filter(key => 
-          key.includes('student_') && 
-          key.includes('_name')
-        );
+    setFile(selectedFile);
+    setIsLoading(true);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = new Uint8Array(event.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
         
-        if (studentKeys.length > 0) {
-          // Extract student data
-          const students = [];
-          
-          // Find all unique student prefixes (e.g., student_1, student_2)
-          const studentPrefixes = new Set<string>();
-          for (const key of Object.keys(project)) {
-            if (key.includes('student_')) {
-              const prefix = key.split('_').slice(0, 2).join('_');
-              studentPrefixes.add(prefix);
-            }
-          }
-          
-          // For each student prefix, extract all data
-          for (const prefix of studentPrefixes) {
-            const student = {
-              name: project[`${prefix}_name`] || '',
-              roll_no: project[`${prefix}_roll_no`] || '',
-              email: project[`${prefix}_email`] || '',
-              program: project[`${prefix}_program`] || ''
-            };
-            
-            // Only add if we have name and roll_no
-            if (student.name && student.roll_no) {
-              students.push(student);
-            }
-          }
-          
-          return {
-            ...project,
-            students
-          };
-        }
+        // Get first sheet
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
         
-        return project;
-      });
-      
-      setImportProgress(70);
-      
-      // Send to server
-      const result = await processProjectsExcel(projectsWithStudents, facultyCoordinator);
-      
-      setImportProgress(100);
-      
-      if (result) {
+        // Convert to json
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+        
+        // Validate and transform data if needed
+        const processedData = jsonData
+          .filter(row => !validateRow || validateRow(row))
+          .map(row => transformRow ? transformRow(row) : row);
+        
+        // Set preview data
+        setPreviewData(processedData.slice(0, 5));
+        
+        // Pass data to parent
+        onDataReady(processedData);
+        
         toast({
-          title: 'Import Complete',
-          description: `Successfully processed ${jsonData.length} projects from Excel.`,
+          title: 'Excel file loaded',
+          description: `${processedData.length} rows found for preview.`,
         });
-        onClose();
-        // Trigger refresh of data
-        window.dispatchEvent(new CustomEvent('refresh-project-data'));
-        return true;
+      } catch (error) {
+        console.error('Error parsing Excel file:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to parse Excel file. Please check the format.',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsLoading(false);
       }
-      return false;
-    } catch (error) {
-      console.error('Error importing Excel:', error);
+    };
+
+    reader.onerror = () => {
       toast({
-        title: 'Import Failed',
-        description: error instanceof Error ? error.message : 'An error occurred during import.',
+        title: 'Error',
+        description: 'Failed to read Excel file.',
+        variant: 'destructive',
+      });
+      setIsLoading(false);
+    };
+
+    reader.readAsArrayBuffer(selectedFile);
+  }, [onDataReady, toast, validateRow, transformRow]);
+
+  const handleImport = useCallback(async () => {
+    if (file) {
+      return true;
+    } else {
+      toast({
+        title: 'No file selected',
+        description: 'Please select an Excel file first.',
         variant: 'destructive',
       });
       return false;
-    } finally {
-      setIsImporting(false);
     }
-  };
+  }, [file, toast]);
 
   return {
-    file,
-    isImporting,
-    importProgress,
+    isLoading,
     previewData,
     handleFileChange,
     handleImport,
+    hasData: previewData.length > 0
   };
 }
 

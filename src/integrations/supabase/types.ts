@@ -177,6 +177,7 @@ export type Database = {
           semester: string | null
           session: string | null
           starting_date: string | null
+          stipend: string | null
           updated_at: string
           year: string | null
         }
@@ -200,6 +201,7 @@ export type Database = {
           semester?: string | null
           session?: string | null
           starting_date?: string | null
+          stipend?: string | null
           updated_at?: string
           year?: string | null
         }
@@ -223,6 +225,7 @@ export type Database = {
           semester?: string | null
           session?: string | null
           starting_date?: string | null
+          stipend?: string | null
           updated_at?: string
           year?: string | null
         }

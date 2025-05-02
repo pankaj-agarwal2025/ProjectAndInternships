@@ -1064,6 +1064,28 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
     }
   };
 
+  const renderCellContent = (value: any): React.ReactNode => {
+    if (Array.isArray(value)) {
+      if (value.length === 0) return 'None';
+      
+      // For Student arrays, render as a list of names
+      if (typeof value[0] === 'object' && 'name' in value[0]) {
+        return (
+          <ul className="list-disc list-inside">
+            {value.map((student, idx) => (
+              <li key={idx}>{student.name}</li>
+            ))}
+          </ul>
+        );
+      }
+      
+      // For other arrays
+      return value.join(', ');
+    }
+    
+    return value;
+  };
+
   return (
     <div>
       <div className="flex justify-between items-center mb-4">

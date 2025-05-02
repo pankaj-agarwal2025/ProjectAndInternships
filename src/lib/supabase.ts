@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js';
 
 // Supabase client setup
@@ -42,6 +41,7 @@ export interface Internship {
   noc_url?: string;
   ppo_url?: string;
   faculty_coordinator?: string;
+  stipend?: string;
 }
 
 export interface Project {
@@ -60,6 +60,8 @@ export interface Project {
   presentation_url?: string;
   report_url?: string;
   initial_evaluation?: string;
+  progress_evaluation?: string;
+  final_evaluation?: string;
   students?: Student[];
   project_category?: string;
   // Evaluation fields
@@ -436,8 +438,8 @@ export const processProjectsExcel = async (excelData: any[], facultyCoordinator:
         .from('projects')
         .select('*, students(*)')
         .eq('group_no', row.group_no)
-        .eq('year', row.year)
-        .eq('semester', row.semester);
+        .eq('year', row.year || '')
+        .eq('semester', row.semester || '');
         
       if (existingProjects && existingProjects.length > 0) {
         // Update existing project with new data
@@ -452,10 +454,15 @@ export const processProjectsExcel = async (excelData: any[], facultyCoordinator:
         }
         
         if (Object.keys(updateData).length > 0) {
-          await supabase
+          const { error } = await supabase
             .from('projects')
             .update(updateData)
             .eq('id', projectId);
+            
+          if (error) {
+            console.error('Error updating project:', error);
+            throw error;
+          }
         }
         
         // Handle students if present
@@ -469,7 +476,7 @@ export const processProjectsExcel = async (excelData: any[], facultyCoordinator:
               
             if (existingStudent && existingStudent.length > 0) {
               // Update student
-              await supabase
+              const { error } = await supabase
                 .from('students')
                 .update({
                   name: student.name,
@@ -477,9 +484,14 @@ export const processProjectsExcel = async (excelData: any[], facultyCoordinator:
                   program: student.program
                 })
                 .eq('id', existingStudent[0].id);
+                
+              if (error) {
+                console.error('Error updating student:', error);
+                throw error;
+              }
             } else {
               // Add new student to existing project
-              await supabase
+              const { error: studentError } = await supabase
                 .from('students')
                 .insert({
                   group_id: projectId,
@@ -488,6 +500,11 @@ export const processProjectsExcel = async (excelData: any[], facultyCoordinator:
                   email: student.email,
                   program: student.program
                 });
+                
+              if (studentError) {
+                console.error('Error adding student:', studentError);
+                throw studentError;
+              }
             }
           }
         }
@@ -506,10 +523,15 @@ export const processProjectsExcel = async (excelData: any[], facultyCoordinator:
           project_category: row.project_category
         };
         
-        const { data: newProject } = await supabase
+        const { data: newProject, error } = await supabase
           .from('projects')
           .insert(projectData)
           .select();
+          
+        if (error) {
+          console.error('Error creating project:', error);
+          throw error;
+        }
           
         if (newProject && newProject.length > 0) {
           const projectId = newProject[0].id;
@@ -517,7 +539,7 @@ export const processProjectsExcel = async (excelData: any[], facultyCoordinator:
           // Add students if present
           if (row.students && Array.isArray(row.students)) {
             for (const student of row.students) {
-              await supabase
+              const { error: studentError } = await supabase
                 .from('students')
                 .insert({
                   group_id: projectId,
@@ -526,6 +548,11 @@ export const processProjectsExcel = async (excelData: any[], facultyCoordinator:
                   email: student.email,
                   program: student.program
                 });
+                
+              if (studentError) {
+                console.error('Error adding student:', studentError);
+                throw studentError;
+              }
             }
           }
         }
@@ -548,9 +575,8 @@ export const processInternshipsExcel = async (excelData: any[], facultyCoordinat
         .from('internships')
         .select('*')
         .eq('roll_no', row.roll_no)
-        .eq('name', row.name)
-        .eq('organization_name', row.organization_name)
-        .eq('position', row.position);
+        .eq('organization_name', row.organization_name || '')
+        .eq('position', row.position || '');
         
       if (existingInternships && existingInternships.length > 0) {
         // Update existing internship with new data
@@ -565,10 +591,15 @@ export const processInternshipsExcel = async (excelData: any[], facultyCoordinat
         }
         
         if (Object.keys(updateData).length > 0) {
-          await supabase
+          const { error } = await supabase
             .from('internships')
             .update(updateData)
             .eq('id', internshipId);
+            
+          if (error) {
+            console.error('Error updating internship:', error);
+            throw error;
+          }
         }
       } else {
         // Create new internship
@@ -586,12 +617,18 @@ export const processInternshipsExcel = async (excelData: any[], facultyCoordinat
           position: row.position,
           starting_date: row.starting_date,
           ending_date: row.ending_date,
+          stipend: row.stipend,
           faculty_coordinator: facultyCoordinator
         };
         
-        await supabase
+        const { error } = await supabase
           .from('internships')
           .insert(internshipData);
+          
+        if (error) {
+          console.error('Error creating internship:', error);
+          throw error;
+        }
       }
     }
     
