@@ -49,7 +49,7 @@ export function useExcelImport({ facultyCoordinator, onClose }: { facultyCoordin
         description: 'Missing required information for import.',
         variant: 'destructive',
       });
-      return;
+      return false;
     }
     
     setIsImporting(true);
@@ -57,7 +57,7 @@ export function useExcelImport({ facultyCoordinator, onClose }: { facultyCoordin
     
     try {
       // Read the Excel file
-      const data = await file.arrayBuffer();
+      const data = await selectedFile.arrayBuffer();
       const workbook = XLSX.read(data, { type: 'array' });
       setImportProgress(30);
       
@@ -134,8 +134,11 @@ export function useExcelImport({ facultyCoordinator, onClose }: { facultyCoordin
           description: `Successfully processed ${jsonData.length} projects from Excel.`,
         });
         onClose();
+        // Trigger refresh of data
+        window.dispatchEvent(new CustomEvent('refresh-project-data'));
         return true;
       }
+      return false;
     } catch (error) {
       console.error('Error importing Excel:', error);
       toast({

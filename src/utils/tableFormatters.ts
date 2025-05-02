@@ -1,35 +1,43 @@
 
-import React from 'react';
-import { Student } from '@/lib/supabase';
-
 /**
- * Formats a Student array into a displayable string for table cells
+ * Format date strings for display
  */
-export const formatStudentList = (students: Student[] | undefined): React.ReactNode => {
-  if (!students || !Array.isArray(students) || students.length === 0) {
-    return <span className="text-gray-400">No students</span>;
-  }
+export const formatDate = (dateString: string | null | undefined): string => {
+  if (!dateString) return 'N/A';
   
-  return (
-    <ul className="list-disc pl-5 space-y-1">
-      {students.map((student, index) => (
-        <li key={index} className="text-sm">
-          {student.name} ({student.roll_no})
-        </li>
-      ))}
-    </ul>
-  );
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return 'Invalid Date';
+  }
 };
 
 /**
- * Converts a Student array to a simple comma-separated string for exports
+ * Format null or undefined values for display
  */
-export const studentListToString = (students: Student[] | undefined): string => {
-  if (!students || !Array.isArray(students) || students.length === 0) {
+export const formatNullable = (value: any): string => {
+  if (value === null || value === undefined || value === '') {
+    return 'N/A';
+  }
+  return String(value);
+};
+
+/**
+ * Get month name from date string
+ */
+export const getMonthFromDate = (dateString: string | null | undefined): string => {
+  if (!dateString) return '';
+  
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleString('default', { month: 'long' });
+  } catch (error) {
     return '';
   }
-  
-  return students
-    .map(student => `${student.name} (${student.roll_no})`)
-    .join(', ');
 };

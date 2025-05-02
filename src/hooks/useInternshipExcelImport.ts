@@ -49,7 +49,7 @@ export function useInternshipExcelImport({ facultyCoordinator, onClose }: { facu
         description: 'Missing required information for import.',
         variant: 'destructive',
       });
-      return;
+      return false;
     }
     
     setIsImporting(true);
@@ -89,8 +89,11 @@ export function useInternshipExcelImport({ facultyCoordinator, onClose }: { facu
           description: `Successfully processed ${jsonData.length} internships from Excel.`,
         });
         onClose();
+        // Trigger refresh of data
+        window.dispatchEvent(new CustomEvent('refresh-internship-data'));
         return true;
       }
+      return false;
     } catch (error) {
       console.error('Error importing Excel:', error);
       toast({

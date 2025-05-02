@@ -49,8 +49,8 @@ import {
   Upload,
   X
 } from 'lucide-react';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { formatDate } from '@/utils/tableFormatters';
+import { generateInternshipPDF } from './InternshipExportPDF';
 import * as XLSX from 'xlsx';
 import { 
   getInternshipDynamicColumns, 
@@ -82,6 +82,8 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     organization_name: '',
     position: '',
     stipend: '',
+    starting_date: '',
+    ending_date: '',
   });
   const [isSaving, setIsSaving] = useState(false);
   const [dynamicColumns, setDynamicColumns] = useState<any[]>([]);
@@ -107,8 +109,13 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     const handleAddNewInternship = () => setIsAddInternshipModalOpen(true);
     document.addEventListener('add-new-internship', handleAddNewInternship);
     
+    // Add event listener for refreshing data
+    const handleRefreshData = () => fetchInternships();
+    window.addEventListener('refresh-internship-data', handleRefreshData);
+    
     return () => {
       document.removeEventListener('add-new-internship', handleAddNewInternship);
+      window.removeEventListener('refresh-internship-data', handleRefreshData);
     };
   }, []);
 
@@ -326,47 +333,117 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     }
   };
 
+  const handleEditInternship = (internship: Internship) => {
+    setEditInternshipId(internship.id);
+    setEditedInternship({...internship});
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editInternshipId) return;
+    
+    setIsSaving(true);
+    try {
+      // Update the internship data
+      const { error } = await supabase
+        .from('internships')
+        .update(editedInternship)
+        .eq('id', editInternshipId);
+      
+      if (error) {
+        throw error;
+      }
+      
+      toast({
+        title: 'Success',
+        description: 'Internship updated successfully.',
+      });
+      
+      // Clear the edit state
+      setEditInternshipId(null);
+      setEditedInternship({});
+      
+      // Refresh the internship data
+      fetchInternships();
+    } catch (error) {
+      console.error('Error updating internship:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update internship. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleAddNewInternship = async () => {
+    setIsSaving(true);
+    try {
+      // Get the faculty data from session storage
+      const facultyData = sessionStorage.getItem('faculty');
+      const faculty = facultyData ? JSON.parse(facultyData) : null;
+      
+      if (!faculty) {
+        throw new Error('No faculty data found.');
+      }
+      
+      // Add faculty coordinator to the new internship
+      const internshipData = {
+        ...newInternship,
+        faculty_coordinator: faculty.name
+      };
+      
+      // Insert the new internship
+      const { data, error } = await supabase
+        .from('internships')
+        .insert(internshipData)
+        .select();
+      
+      if (error) {
+        throw error;
+      }
+      
+      toast({
+        title: 'Success',
+        description: 'New internship added successfully.',
+      });
+      
+      // Close the add modal and reset form
+      setIsAddInternshipModalOpen(false);
+      setNewInternship({
+        roll_no: '',
+        name: '',
+        email: '',
+        phone_no: '',
+        domain: '',
+        organization_name: '',
+        position: '',
+        stipend: '',
+        starting_date: '',
+        ending_date: '',
+      });
+      
+      // Refresh the internship data
+      fetchInternships();
+    } catch (error) {
+      console.error('Error adding internship:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to add internship. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditInternshipId(null);
+    setEditedInternship({});
+  };
+
   const generatePDF = () => {
-    const doc = new jsPDF();
-    
-    // Add title
-    doc.setFontSize(18);
-    doc.text('Internship Report', 14, 20);
-    doc.setFontSize(12);
-    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 30);
-    
-    // Define table columns
-    const columns = [
-      { header: 'Roll No', dataKey: 'roll_no' },
-      { header: 'Name', dataKey: 'name' },
-      { header: 'Organization', dataKey: 'organization_name' },
-      { header: 'Position', dataKey: 'position' },
-      { header: 'Stipend', dataKey: 'stipend' },
-      { header: 'Duration', dataKey: 'internship_duration' },
-    ];
-    
-    // Prepare data for table
-    const data = internships.map(internship => ({
-      roll_no: internship.roll_no || '',
-      name: internship.name || '',
-      organization_name: internship.organization_name || '',
-      position: internship.position || '',
-      stipend: internship.stipend || '',
-      internship_duration: internship.internship_duration ? `${internship.internship_duration} days` : ''
-    }));
-    
-    // Create table
-    autoTable(doc, {
-      columns: columns.map(col => ({ header: col.header, dataKey: col.dataKey })),
-      body: data,
-      startY: 40,
-      styles: { fontSize: 10, cellPadding: 2 },
-      headStyles: { fillColor: [41, 128, 185], textColor: 255 },
-      alternateRowStyles: { fillColor: [245, 245, 245] }
-    });
-    
-    // Save the PDF
-    doc.save('internship-report.pdf');
+    generateInternshipPDF(internships, filters);
   };
 
   const exportExcel = () => {
@@ -400,6 +477,165 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     // Generate and download the Excel file
     XLSX.writeFile(wb, 'internships-export.xlsx');
   };
+
+  // MODAL: Add new internship
+  const renderAddInternshipModal = () => (
+    <Dialog open={isAddInternshipModalOpen} onOpenChange={setIsAddInternshipModalOpen}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Add New Internship</DialogTitle>
+        </DialogHeader>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
+          <div className="space-y-2">
+            <label htmlFor="roll_no" className="text-sm font-medium">Roll No*</label>
+            <Input
+              id="roll_no"
+              value={newInternship.roll_no || ''}
+              onChange={e => setNewInternship(prev => ({ ...prev, roll_no: e.target.value }))}
+              required
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <label htmlFor="name" className="text-sm font-medium">Name*</label>
+            <Input
+              id="name"
+              value={newInternship.name || ''}
+              onChange={e => setNewInternship(prev => ({ ...prev, name: e.target.value }))}
+              required
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <label htmlFor="email" className="text-sm font-medium">Email</label>
+            <Input
+              id="email"
+              type="email"
+              value={newInternship.email || ''}
+              onChange={e => setNewInternship(prev => ({ ...prev, email: e.target.value }))}
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <label htmlFor="phone_no" className="text-sm font-medium">Phone No</label>
+            <Input
+              id="phone_no"
+              value={newInternship.phone_no || ''}
+              onChange={e => setNewInternship(prev => ({ ...prev, phone_no: e.target.value }))}
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <label htmlFor="domain" className="text-sm font-medium">Domain</label>
+            <Input
+              id="domain"
+              value={newInternship.domain || ''}
+              onChange={e => setNewInternship(prev => ({ ...prev, domain: e.target.value }))}
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <label htmlFor="organization_name" className="text-sm font-medium">Organization Name</label>
+            <Input
+              id="organization_name"
+              value={newInternship.organization_name || ''}
+              onChange={e => setNewInternship(prev => ({ ...prev, organization_name: e.target.value }))}
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <label htmlFor="position" className="text-sm font-medium">Position</label>
+            <Input
+              id="position"
+              value={newInternship.position || ''}
+              onChange={e => setNewInternship(prev => ({ ...prev, position: e.target.value }))}
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <label htmlFor="stipend" className="text-sm font-medium">Stipend</label>
+            <Input
+              id="stipend"
+              value={newInternship.stipend || ''}
+              onChange={e => setNewInternship(prev => ({ ...prev, stipend: e.target.value }))}
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <label htmlFor="starting_date" className="text-sm font-medium">Starting Date</label>
+            <Input
+              id="starting_date"
+              type="date"
+              value={newInternship.starting_date || ''}
+              onChange={e => setNewInternship(prev => ({ ...prev, starting_date: e.target.value }))}
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <label htmlFor="ending_date" className="text-sm font-medium">Ending Date</label>
+            <Input
+              id="ending_date"
+              type="date"
+              value={newInternship.ending_date || ''}
+              onChange={e => setNewInternship(prev => ({ ...prev, ending_date: e.target.value }))}
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <label htmlFor="program" className="text-sm font-medium">Program</label>
+            <Input
+              id="program"
+              value={newInternship.program || ''}
+              onChange={e => setNewInternship(prev => ({ ...prev, program: e.target.value }))}
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <label htmlFor="year" className="text-sm font-medium">Year</label>
+            <Input
+              id="year"
+              value={newInternship.year || ''}
+              onChange={e => setNewInternship(prev => ({ ...prev, year: e.target.value }))}
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <label htmlFor="semester" className="text-sm font-medium">Semester</label>
+            <Input
+              id="semester"
+              value={newInternship.semester || ''}
+              onChange={e => setNewInternship(prev => ({ ...prev, semester: e.target.value }))}
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <label htmlFor="session" className="text-sm font-medium">Session</label>
+            <Input
+              id="session"
+              value={newInternship.session || ''}
+              onChange={e => setNewInternship(prev => ({ ...prev, session: e.target.value }))}
+            />
+          </div>
+        </div>
+        
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => setIsAddInternshipModalOpen(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleAddNewInternship}
+            disabled={isSaving || !newInternship.roll_no || !newInternship.name}
+          >
+            {isSaving ? 'Saving...' : 'Save'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 
   // Table rendering
   return (
@@ -449,6 +685,8 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
               <TableHead>Name</TableHead>
               <TableHead>Organization</TableHead>
               <TableHead>Position</TableHead>
+              <TableHead>Starting Date</TableHead>
+              <TableHead>Ending Date</TableHead>
               <TableHead>Stipend</TableHead>
               <TableHead>Duration</TableHead>
               <TableHead>Documents</TableHead>
@@ -458,7 +696,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
           <TableBody>
             {internships.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-8">
+                <TableCell colSpan={11} className="text-center py-8">
                   No internships found. Try adjusting your filters or adding new internships.
                 </TableCell>
               </TableRow>
@@ -473,11 +711,78 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
                       className="h-4 w-4"
                     />
                   </TableCell>
-                  <TableCell>{internship.roll_no}</TableCell>
-                  <TableCell>{internship.name}</TableCell>
-                  <TableCell>{internship.organization_name}</TableCell>
-                  <TableCell>{internship.position}</TableCell>
-                  <TableCell>{internship.stipend}</TableCell>
+                  <TableCell>
+                    {editInternshipId === internship.id ? (
+                      <Input 
+                        value={editedInternship.roll_no || ''} 
+                        onChange={e => setEditedInternship(prev => ({ ...prev, roll_no: e.target.value }))}
+                      />
+                    ) : (
+                      internship.roll_no
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {editInternshipId === internship.id ? (
+                      <Input 
+                        value={editedInternship.name || ''} 
+                        onChange={e => setEditedInternship(prev => ({ ...prev, name: e.target.value }))}
+                      />
+                    ) : (
+                      internship.name
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {editInternshipId === internship.id ? (
+                      <Input 
+                        value={editedInternship.organization_name || ''} 
+                        onChange={e => setEditedInternship(prev => ({ ...prev, organization_name: e.target.value }))}
+                      />
+                    ) : (
+                      internship.organization_name
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {editInternshipId === internship.id ? (
+                      <Input 
+                        value={editedInternship.position || ''} 
+                        onChange={e => setEditedInternship(prev => ({ ...prev, position: e.target.value }))}
+                      />
+                    ) : (
+                      internship.position
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {editInternshipId === internship.id ? (
+                      <Input 
+                        type="date"
+                        value={editedInternship.starting_date || ''} 
+                        onChange={e => setEditedInternship(prev => ({ ...prev, starting_date: e.target.value }))}
+                      />
+                    ) : (
+                      formatDate(internship.starting_date)
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {editInternshipId === internship.id ? (
+                      <Input 
+                        type="date"
+                        value={editedInternship.ending_date || ''} 
+                        onChange={e => setEditedInternship(prev => ({ ...prev, ending_date: e.target.value }))}
+                      />
+                    ) : (
+                      formatDate(internship.ending_date)
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {editInternshipId === internship.id ? (
+                      <Input 
+                        value={editedInternship.stipend || ''} 
+                        onChange={e => setEditedInternship(prev => ({ ...prev, stipend: e.target.value }))}
+                      />
+                    ) : (
+                      internship.stipend || 'N/A'
+                    )}
+                  </TableCell>
                   <TableCell>
                     {internship.internship_duration ? `${internship.internship_duration} days` : 'N/A'}
                   </TableCell>
@@ -570,28 +875,45 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center space-x-2">
-                      <Button 
-                        variant="ghost" 
-                        size="icon"
-                        onClick={() => {
-                          setEditInternshipId(internship.id);
-                          setEditedInternship({...internship});
-                        }}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="icon"
-                        onClick={() => {
-                          setSelectedInternships([internship.id]);
-                          setIsDeleteAlertOpen(true);
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
+                    {editInternshipId === internship.id ? (
+                      <div className="flex items-center space-x-2">
+                        <Button 
+                          variant="default" 
+                          size="sm"
+                          onClick={handleSaveEdit}
+                          disabled={isSaving}
+                        >
+                          {isSaving ? 'Saving...' : 'Save'}
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={handleCancelEdit}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center space-x-2">
+                        <Button 
+                          variant="ghost" 
+                          size="icon"
+                          onClick={() => handleEditInternship(internship)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon"
+                          onClick={() => {
+                            setSelectedInternships([internship.id]);
+                            setIsDeleteAlertOpen(true);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    )}
                   </TableCell>
                 </TableRow>
               ))
@@ -606,6 +928,8 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
           Add Dynamic Column
         </Button>
       </div>
+
+      {renderAddInternshipModal()}
 
       <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
         <AlertDialogContent>
