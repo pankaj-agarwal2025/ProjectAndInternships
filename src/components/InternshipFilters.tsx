@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -20,12 +21,18 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
   const [session, setSession] = useState('');
   const [organization, setOrganization] = useState('');
   const [program, setProgram] = useState('');
+  const [month, setMonth] = useState('');
+  const [facultyCoordinator, setFacultyCoordinator] = useState('');
   const [dynamicFilters, setDynamicFilters] = useState<Record<string, string>>({});
   const [dynamicColumns, setDynamicColumns] = useState<any[]>([]);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [availableMonths, setAvailableMonths] = useState<string[]>([]);
+  const [availableCoordinators, setAvailableCoordinators] = useState<string[]>([]);
 
   useEffect(() => {
     fetchDynamicColumns();
+    fetchAvailableMonths();
+    fetchAvailableCoordinators();
   }, []);
 
   useEffect(() => {
@@ -37,10 +44,12 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
       session: session || '',
       organization_name: organization || '',
       program: program === 'all_programs' ? '' : program,
+      month: month === 'all_months' ? '' : month,
+      faculty_coordinator: facultyCoordinator === 'all_coordinators' ? '' : facultyCoordinator,
       ...dynamicFilters,
     };
     onFilterChange(filters);
-  }, [searchTerm, domain, year, semester, session, organization, program, dynamicFilters, onFilterChange]);
+  }, [searchTerm, domain, year, semester, session, organization, program, month, facultyCoordinator, dynamicFilters, onFilterChange]);
 
   const fetchDynamicColumns = async () => {
     try {
@@ -48,6 +57,46 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
       setDynamicColumns(columns);
     } catch (error) {
       console.error('Error fetching dynamic columns:', error);
+    }
+  };
+
+  const fetchAvailableMonths = async () => {
+    try {
+      const { data } = await supabase
+        .from('internships')
+        .select('starting_date');
+      
+      if (data) {
+        const months = data
+          .filter(item => item.starting_date)
+          .map(item => {
+            const date = new Date(item.starting_date);
+            return date.toLocaleString('default', { month: 'long' });
+          });
+        
+        setAvailableMonths([...new Set(months)]);
+      }
+    } catch (error) {
+      console.error('Error fetching available months:', error);
+    }
+  };
+
+  const fetchAvailableCoordinators = async () => {
+    try {
+      const { data } = await supabase
+        .from('internships')
+        .select('faculty_coordinator')
+        .not('faculty_coordinator', 'is', null);
+      
+      if (data) {
+        const coordinators = data
+          .map(item => item.faculty_coordinator)
+          .filter(Boolean);
+        
+        setAvailableCoordinators([...new Set(coordinators)]);
+      }
+    } catch (error) {
+      console.error('Error fetching available coordinators:', error);
     }
   };
 
@@ -66,6 +115,8 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
     setSession('');
     setOrganization('');
     setProgram('');
+    setMonth('');
+    setFacultyCoordinator('');
     setDynamicFilters({});
   };
 
@@ -92,7 +143,7 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
             {isFiltersOpen ? 'Hide Filters' : 'Show Filters'}
           </Button>
           
-          {(searchTerm || domain || year || semester || session || organization || program || Object.keys(dynamicFilters).length > 0) && (
+          {(searchTerm || domain || year || semester || session || organization || program || month || facultyCoordinator || Object.keys(dynamicFilters).length > 0) && (
             <Button
               variant="ghost"
               onClick={handleClearFilters}
@@ -185,6 +236,36 @@ const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange })
                 onChange={(e) => setSession(e.target.value)}
                 placeholder="e.g., 2024-25"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="month">Starting Month</Label>
+              <Select value={month} onValueChange={setMonth}>
+                <SelectTrigger id="month">
+                  <SelectValue placeholder="All Months" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all_months">All Months</SelectItem>
+                  {availableMonths.map((m) => (
+                    <SelectItem key={m} value={m}>{m}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="facultyCoordinator">Faculty Coordinator</Label>
+              <Select value={facultyCoordinator} onValueChange={setFacultyCoordinator}>
+                <SelectTrigger id="facultyCoordinator">
+                  <SelectValue placeholder="All Coordinators" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all_coordinators">All Coordinators</SelectItem>
+                  {availableCoordinators.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             
             {/* Dynamic columns filters */}

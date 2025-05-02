@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Progress } from '@/components/ui/progress';
 import { Loader2, Upload } from 'lucide-react';
 import useInternshipExcelImport from '@/hooks/useInternshipExcelImport';
 
@@ -25,6 +26,7 @@ const ImportExcelInternshipModal: React.FC<ImportExcelInternshipModalProps> = ({
   const {
     file,
     isImporting,
+    importProgress,
     previewData,
     handleFileChange,
     handleImport,
@@ -40,7 +42,7 @@ const ImportExcelInternshipModal: React.FC<ImportExcelInternshipModalProps> = ({
           <DialogTitle>Import Internships from Excel</DialogTitle>
         </DialogHeader>
         
-        <div className="space-y-6">
+        <div className="space-y-6 max-h-[70vh] overflow-y-auto py-2">
           <div className="space-y-2">
             <Label htmlFor="excel-file">Upload Excel File</Label>
             <Input
@@ -50,14 +52,21 @@ const ImportExcelInternshipModal: React.FC<ImportExcelInternshipModalProps> = ({
               onChange={handleFileChange}
             />
             <p className="text-xs text-gray-500 mt-1">
-              Excel file should contain columns: Roll No, Name, Email, Phone No, Domain, Session, Year, Semester, Program, Organization Name, Position, Starting Date, Ending Date.
+              Excel file should contain columns: Roll No, Name, Email, Phone No, Domain, Session, Year, Semester, Program, Organization Name, Position, Starting Date, Ending Date, Stipend.
             </p>
           </div>
+          
+          {isImporting && (
+            <div className="space-y-2">
+              <Label>Import Progress</Label>
+              <Progress value={importProgress} className="h-2" />
+            </div>
+          )}
           
           {previewData && previewData.length > 0 && (
             <div className="space-y-2">
               <Label>Data Preview (First 5 rows)</Label>
-              <div className="max-h-40 overflow-y-auto border rounded-md p-2">
+              <div className="max-h-60 overflow-y-auto border rounded-md p-2">
                 <pre className="text-xs">{JSON.stringify(previewData, null, 2)}</pre>
               </div>
             </div>

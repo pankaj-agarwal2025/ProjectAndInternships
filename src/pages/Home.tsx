@@ -6,8 +6,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Faculty, setupDatabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
 import Navbar from '@/components/Navbar';
-import AdminPanel from '@/components/AdminPanel';
-import Footer from '@/components/footer';
+import CollapsibleAdminPanel from '@/components/CollapsibleAdminPanel';
 import { BookOpen, Users, LogOut } from 'lucide-react';
 
 const Home = () => {
@@ -75,17 +74,16 @@ const Home = () => {
             </p>
           </div>
 
-          <Button variant="outline" onClick={handleLogout}>
-            <LogOut className="mr-2 h-4 w-4" />
-            Logout
-          </Button>
-        </div>
-
-        {faculty?.role === 'admin' && (
-          <div className="mb-10">
-            <AdminPanel currentFaculty={faculty} />
+          <div className="flex items-center gap-3">
+            {faculty?.role === 'admin' && (
+              <CollapsibleAdminPanel currentFaculty={faculty} />
+            )}
+            <Button variant="outline" onClick={handleLogout}>
+              <LogOut className="mr-2 h-4 w-4" />
+              Logout
+            </Button>
           </div>
-        )}
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Card>
@@ -135,8 +133,6 @@ const Home = () => {
           </Card>
         </div>
       </div>
-
-
     </div>
   );
 };

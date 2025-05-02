@@ -4,13 +4,53 @@ import * as XLSX from 'xlsx';
 import { processProjectsExcel } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
 
-export function useExcelImport() {
+export function useExcelImport({ facultyCoordinator, onClose }: { facultyCoordinator: string; onClose: () => void }) {
+  const [file, setFile] = useState<File | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+  const [previewData, setPreviewData] = useState<any[]>([]);
   const { toast } = useToast();
 
-  const handleExcelImport = async (file: File, facultyCoordinator: string) => {
-    if (!file) return;
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (!selectedFile) return;
+    
+    setFile(selectedFile);
+    
+    try {
+      // Read the Excel file to preview
+      const data = await selectedFile.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      
+      // Get the first sheet
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      
+      // Convert to JSON
+      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      
+      // Only show first 5 rows for preview
+      setPreviewData(jsonData.slice(0, 5));
+    } catch (error) {
+      console.error('Error previewing Excel:', error);
+      toast({
+        title: 'Preview Failed',
+        description: error instanceof Error ? error.message : 'An error occurred previewing the file.',
+        variant: 'destructive',
+      });
+      setFile(null);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!file || !facultyCoordinator) {
+      toast({
+        title: 'Import Failed',
+        description: 'Missing required information for import.',
+        variant: 'destructive',
+      });
+      return;
+    }
     
     setIsImporting(true);
     setImportProgress(10);
@@ -93,6 +133,7 @@ export function useExcelImport() {
           title: 'Import Complete',
           description: `Successfully processed ${jsonData.length} projects from Excel.`,
         });
+        onClose();
         return true;
       }
     } catch (error) {
@@ -109,9 +150,12 @@ export function useExcelImport() {
   };
 
   return {
-    handleExcelImport,
+    file,
     isImporting,
-    importProgress
+    importProgress,
+    previewData,
+    handleFileChange,
+    handleImport,
   };
 }
 
