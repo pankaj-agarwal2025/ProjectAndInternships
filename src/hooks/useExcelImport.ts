@@ -2,17 +2,22 @@
 import { useState, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { useToast } from '@/components/ui/use-toast';
+import { processProjectsExcel, processInternshipsExcel } from '@/lib/supabase';
 
 interface UseExcelImportProps {
   onDataReady: (data: any[]) => void;
   validateRow?: (row: any) => boolean;
   transformRow?: (row: any) => any;
+  facultyCoordinator?: string;
+  onClose?: () => void;
 }
 
-export function useExcelImport({ onDataReady, validateRow, transformRow }: UseExcelImportProps) {
+export function useExcelImport({ onDataReady, validateRow, transformRow, facultyCoordinator, onClose }: UseExcelImportProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [file, setFile] = useState<File | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
   const { toast } = useToast();
 
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -75,24 +80,68 @@ export function useExcelImport({ onDataReady, validateRow, transformRow }: UseEx
   }, [onDataReady, toast, validateRow, transformRow]);
 
   const handleImport = useCallback(async () => {
-    if (file) {
-      return true;
-    } else {
+    if (!file || !facultyCoordinator) {
       toast({
-        title: 'No file selected',
-        description: 'Please select an Excel file first.',
+        title: 'No file selected or faculty coordinator missing',
+        description: 'Please select an Excel file and ensure faculty coordinator is set.',
         variant: 'destructive',
       });
       return false;
     }
-  }, [file, toast]);
+    
+    setIsImporting(true);
+    setImportProgress(10);
+    
+    try {
+      // Process the data based on the current path
+      const isProjectData = window.location.pathname.includes('project');
+      
+      if (isProjectData) {
+        await processProjectsExcel(previewData, facultyCoordinator);
+      } else {
+        await processInternshipsExcel(previewData, facultyCoordinator);
+      }
+      
+      setImportProgress(100);
+      
+      toast({
+        title: 'Import Successful',
+        description: `Data has been successfully imported.`,
+      });
+      
+      // Close the modal after successful import
+      if (onClose) {
+        setTimeout(() => {
+          onClose();
+          setFile(null);
+          setPreviewData([]);
+          setImportProgress(0);
+        }, 1500);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error importing data:', error);
+      toast({
+        title: 'Import Failed',
+        description: 'An error occurred while importing data. Please try again.',
+        variant: 'destructive',
+      });
+      return false;
+    } finally {
+      setIsImporting(false);
+    }
+  }, [file, previewData, facultyCoordinator, toast, onClose]);
 
   return {
     isLoading,
     previewData,
     handleFileChange,
     handleImport,
-    hasData: previewData.length > 0
+    hasData: previewData.length > 0,
+    file,
+    isImporting,
+    importProgress
   };
 }
 

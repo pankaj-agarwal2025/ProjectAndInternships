@@ -433,6 +433,9 @@ export const processProjectsExcel = async (excelData: any[], facultyCoordinator:
     // Logic to process Excel data and update/create projects
     // For each row in Excel
     for (const row of excelData) {
+      // Use type assertion to fix TypeScript error
+      const projectData: Record<string, any> = row;
+      
       // Check if this project already exists
       const { data: existingProjects } = await supabase
         .from('projects')
@@ -570,6 +573,9 @@ export const processInternshipsExcel = async (excelData: any[], facultyCoordinat
   try {
     // For each row in Excel
     for (const row of excelData) {
+      // Use type assertion to fix TypeScript error
+      const internshipData: Record<string, any> = row;
+      
       // Check if this internship already exists
       const { data: existingInternships } = await supabase
         .from('internships')

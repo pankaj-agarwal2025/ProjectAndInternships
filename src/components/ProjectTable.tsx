@@ -504,7 +504,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
     }
     
     try {
-      await deleteDynamicColumn(columnToDelete);
+      await deleteDynamicColumn(columnId);
       fetchDynamicColumns();
       const updatedValues = { ...dynamicColumnValues };
       Object.keys(updatedValues).forEach(projectId => {
@@ -617,11 +617,16 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
   };
 
   const generatePdf = () => {
-    const doc = new jsPDF();
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: 'a4'
+    });
     
     // Add title
     doc.setFontSize(16);
-    doc.text("Project Portal Report", 14, 10);
+    const pageWidth = doc.internal.pageSize.getWidth();
+    doc.text("Project Portal Report", pageWidth / 2, 10, { align: 'center' });
     
     // Add filter information at the top
     let filterText = 'Filter Information:\n';
@@ -666,6 +671,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
     
     // Create data rows
     const rows = projects.map(project => {
+      // Create simple text-only rows for PDF export
       const standardData = [
         project.group_no || '',
         project.title || '',
@@ -699,10 +705,39 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
       startY: 40,
       head: [allColumns],
       body: rows,
+      headStyles: {
+        fillColor: [41, 128, 185],
+        textColor: [255, 255, 255],
+        halign: 'center',
+        valign: 'middle',
+        fontSize: 10,
+        cellPadding: 3,
+      },
+      bodyStyles: {
+        fontSize: 9,
+        cellPadding: 3,
+      },
+      margin: { top: 20, right: 15, bottom: 15, left: 15 },
+      styles: {
+        overflow: 'linebreak',
+        cellWidth: 'wrap',
+        font: 'helvetica',
+      },
+      columnStyles: {
+        1: { cellWidth: 'auto' }, // Title column
+      },
       didDrawPage: (data) => {
         // Header on each page
         doc.setFontSize(10);
         doc.text("Project Portal Report - " + new Date().toLocaleDateString(), data.settings.margin.left, 10);
+        
+        // Footer with page number
+        const pageCount = doc.getNumberOfPages();
+        doc.setFontSize(8);
+        for(let i = 1; i <= pageCount; i++) {
+          doc.setPage(i);
+          doc.text(`Page ${i} of ${pageCount}`, doc.internal.pageSize.getWidth() / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' });
+        }
       }
     });
     
@@ -1065,6 +1100,10 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
   };
 
   const renderCellContent = (value: any): React.ReactNode => {
+    if (value === null || value === undefined) {
+      return '';
+    }
+    
     if (Array.isArray(value)) {
       if (value.length === 0) return 'None';
       
@@ -1083,7 +1122,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
       return value.join(', ');
     }
     
-    return value;
+    return String(value);
   };
 
   return (

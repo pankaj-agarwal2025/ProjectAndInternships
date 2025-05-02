@@ -18,6 +18,7 @@ const ImportExcelModal: React.FC<ImportExcelModalProps> = ({ isOpen, onClose }) 
   const [minStudents, setMinStudents] = useState(1);
   const [maxStudents, setMaxStudents] = useState(4);
   const [facultyData, setFacultyData] = useState<any>(null);
+  const [excelData, setExcelData] = useState<any[]>([]);
 
   React.useEffect(() => {
     const storedFaculty = sessionStorage.getItem('faculty');
@@ -27,15 +28,18 @@ const ImportExcelModal: React.FC<ImportExcelModalProps> = ({ isOpen, onClose }) 
   }, []);
 
   const {
-    file,
-    isImporting,
-    importProgress,
+    isLoading,
     previewData,
     handleFileChange,
     handleImport,
+    hasData,
+    file,
+    isImporting,
+    importProgress
   } = useExcelImport({
+    onDataReady: setExcelData,
     facultyCoordinator: facultyData?.name || '',
-    onClose,
+    onClose
   });
 
   const handleClose = () => {
