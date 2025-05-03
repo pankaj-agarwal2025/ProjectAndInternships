@@ -27,6 +27,7 @@ const ProjectTableCellContent: React.FC<ProjectTableCellContentProps> = ({ value
     return <>{value.join(', ')}</>;
   }
   
+  // Convert to string for proper displaying
   return <>{String(value)}</>;
 };
 

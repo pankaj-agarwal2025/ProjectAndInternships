@@ -109,6 +109,46 @@ export const setupDatabase = async () => {
   }
 };
 
+// Add a project and associated students
+export const addProject = async (projectData: Omit<Project, 'id' | 'created_at' | 'updated_at' | 'students'>, students: Omit<Student, 'id' | 'created_at' | 'group_id'>[]) => {
+  try {
+    // Insert the project first to get its ID
+    const { data: projectResult, error: projectError } = await supabase
+      .from('projects')
+      .insert(projectData)
+      .select('id')
+      .single();
+
+    if (projectError || !projectResult) {
+      console.error('Error adding project:', projectError);
+      throw projectError || new Error('Failed to add project');
+    }
+
+    const projectId = projectResult.id;
+
+    // Prepare student data with the project ID
+    const studentsWithProjectId = students.map(student => ({
+      ...student,
+      group_id: projectId
+    }));
+
+    // Insert all students
+    const { error: studentsError } = await supabase
+      .from('students')
+      .insert(studentsWithProjectId);
+
+    if (studentsError) {
+      console.error('Error adding students:', studentsError);
+      throw studentsError;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error in addProject:', error);
+    throw error as Error;
+  }
+};
+
 // Find this function in the file and fix the TypeScript error by using type assertion
 export const deleteDynamicColumn = async (columnId: string) => {
   try {
