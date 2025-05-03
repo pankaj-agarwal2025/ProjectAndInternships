@@ -39,7 +39,9 @@ const ImportExcelModal: React.FC<ImportExcelModalProps> = ({ isOpen, onClose }) 
   } = useExcelImport({
     onDataReady: setExcelData,
     facultyCoordinator: facultyData?.name || '',
-    onClose
+    onClose,
+    minStudents,
+    maxStudents
   });
 
   const handleClose = () => {
@@ -63,11 +65,12 @@ const ImportExcelModal: React.FC<ImportExcelModalProps> = ({ isOpen, onClose }) 
               type="file"
               accept=".xlsx,.xls"
               onChange={handleFileChange}
+              disabled={isImporting}
             />
             <p className="text-xs text-gray-500 mt-1">
-              Excel file should contain columns: Group No, Roll No, Name, Email, Program, Title, Domain, Faculty Mentor, Industry Mentor, and optional file URLs. 
+              Excel file should contain columns: Group No*, Title*, Roll No*, Name*, Email, Program, Domain, Faculty Mentor, Industry Mentor, and optional file URLs. 
               <br />
-              For evaluations, include: initial_clarity_objectives, initial_background_feasibility, initial_usability_applications, initial_innovation_novelty, progress_data_extraction, progress_methodology, progress_implementation, progress_code_optimization, progress_user_interface, final_implementation, final_results, final_research_paper, final_project_completion.
+              (* indicates required fields)
             </p>
           </div>
           
@@ -82,12 +85,13 @@ const ImportExcelModal: React.FC<ImportExcelModalProps> = ({ isOpen, onClose }) 
             <div className="space-y-2">
               <Label>Import Progress</Label>
               <Progress value={importProgress} className="h-2" />
+              <p className="text-xs text-center">{Math.round(importProgress)}%</p>
             </div>
           )}
           
           {previewData && previewData.length > 0 && (
             <div className="space-y-2">
-              <Label>Data Preview (First 5 rows)</Label>
+              <Label>Data Preview (First {previewData.length} rows)</Label>
               <div className="max-h-60 overflow-y-auto border rounded-md p-2">
                 <pre className="text-xs">{JSON.stringify(previewData, null, 2)}</pre>
               </div>
@@ -95,7 +99,7 @@ const ImportExcelModal: React.FC<ImportExcelModalProps> = ({ isOpen, onClose }) 
           )}
           
           <div className="flex justify-end space-x-2">
-            <Button variant="outline" onClick={handleClose}>
+            <Button variant="outline" onClick={handleClose} disabled={isImporting}>
               Cancel
             </Button>
             <Button 

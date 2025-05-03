@@ -3,9 +3,9 @@ import React, { useState } from 'react';
 import { FileText, ExternalLink, File, Link as LinkIcon } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { uploadFile } from '@/lib/supabase';
-import { useToast } from '@/components/ui/use-toast';
+import { useFileUpload } from '@/hooks/useFileUpload';
 import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/components/ui/use-toast';
 
 interface PdfFieldCellProps {
   projectId: string;
@@ -23,29 +23,19 @@ const PdfFieldCell: React.FC<PdfFieldCellProps> = ({
   isEditing 
 }) => {
   const [isSaving, setIsSaving] = useState(false);
+  const [linkUrl, setLinkUrl] = useState(value || '');
+  const [isAddingLink, setIsAddingLink] = useState(false);
   const { toast } = useToast();
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) {
-      toast({
-        title: 'Error',
-        description: 'Please select a file to upload.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    try {
-      setIsSaving(true);
-      const fileName = `${projectId}/${field}/${file.name.replace(/\s+/g, '_')}`;
-      const fileUrl = await uploadFile(file, 'projects', fileName);
-      
-      if (fileUrl) {
-        // Update the project with the new file URL
+  
+  const { handleFileChange, isUploading, progress } = useFileUpload({
+    bucketName: 'projects',
+    entityId: projectId,
+    fieldName: field,
+    onUploadComplete: async (url) => {
+      try {
         await supabase
           .from('projects')
-          .update({ [field]: fileUrl })
+          .update({ [field]: url })
           .eq('id', projectId);
         
         toast({
@@ -55,12 +45,38 @@ const PdfFieldCell: React.FC<PdfFieldCellProps> = ({
         
         // Refresh page to show updated file
         window.location.reload();
+      } catch (error) {
+        console.error('Error updating project after upload:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to update project with new file URL.',
+          variant: 'destructive',
+        });
       }
+    }
+  });
+
+  const handleSaveLink = async () => {
+    setIsSaving(true);
+    try {
+      await supabase
+        .from('projects')
+        .update({ [field]: linkUrl })
+        .eq('id', projectId);
+      
+      toast({
+        title: 'Success',
+        description: 'Link saved successfully!',
+      });
+      
+      setIsAddingLink(false);
+      // Refresh page to show updated link
+      window.location.reload();
     } catch (error) {
-      console.error('Error uploading file:', error);
+      console.error('Error saving link:', error);
       toast({
         title: 'Error',
-        description: 'Failed to upload file. Please try again.',
+        description: 'Failed to save link. Please try again.',
         variant: 'destructive',
       });
     } finally {
@@ -71,42 +87,72 @@ const PdfFieldCell: React.FC<PdfFieldCellProps> = ({
   if (isEditing) {
     return (
       <div className="flex flex-col space-y-2">
-        <Input 
-          id={`${field}-${projectId}`}
-          type="text"
-          defaultValue={value || ''}
-        />
-        <div className="flex space-x-2">
-          <Button 
-            size="sm" 
-            variant="outline" 
-            onClick={() => {
-              document.getElementById(`file-upload-${field}-${projectId}`)?.click();
-            }}
-            disabled={isSaving}
-          >
-            {isSaving ? (
-              'Uploading...'
-            ) : (
-              <>
-                <File className="h-4 w-4 mr-1" /> Choose File
-              </>
-            )}
-          </Button>
-          <input
-            id={`file-upload-${field}-${projectId}`}
-            type="file"
-            accept=".pdf"
-            className="hidden"
-            onChange={handleFileChange}
-          />
-          <Button 
-            size="sm" 
-            variant="outline"
-          >
-            <LinkIcon className="h-4 w-4 mr-1" /> Add Link
-          </Button>
-        </div>
+        {isAddingLink ? (
+          <div className="flex items-center space-x-2">
+            <Input 
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              placeholder="Enter URL"
+              className="flex-1"
+            />
+            <Button 
+              size="sm" 
+              variant="outline"
+              disabled={isSaving} 
+              onClick={handleSaveLink}
+            >
+              Save
+            </Button>
+            <Button 
+              size="sm" 
+              variant="ghost"
+              onClick={() => setIsAddingLink(false)}
+            >
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <>
+            <Input 
+              id={`${field}-${projectId}`}
+              type="text"
+              value={value || ''}
+              disabled={true}
+            />
+            <div className="flex space-x-2">
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={() => {
+                  document.getElementById(`file-upload-${field}-${projectId}`)?.click();
+                }}
+                disabled={isUploading}
+              >
+                {isUploading ? (
+                  progress > 0 ? `Uploading ${progress}%` : 'Uploading...'
+                ) : (
+                  <>
+                    <File className="h-4 w-4 mr-1" /> Choose File
+                  </>
+                )}
+              </Button>
+              <input
+                id={`file-upload-${field}-${projectId}`}
+                type="file"
+                accept=".pdf"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => setIsAddingLink(true)}
+              >
+                <LinkIcon className="h-4 w-4 mr-1" /> Add Link
+              </Button>
+            </div>
+          </>
+        )}
       </div>
     );
   }

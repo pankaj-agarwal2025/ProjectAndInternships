@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { addProject } from '@/lib/supabase';
+import { useToast } from '@/components/ui/use-toast';
 
 export interface UseExcelImportProps {
   onDataReady: (data: any[]) => void;
@@ -25,6 +26,7 @@ const useExcelImport = ({
   const [hasData, setHasData] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+  const { toast } = useToast();
   
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) {
@@ -47,14 +49,39 @@ const useExcelImport = ({
         const workbook = XLSX.read(data, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const parsedData = XLSX.utils.sheet_to_json(worksheet);
+        const parsedData = XLSX.utils.sheet_to_json(worksheet, {
+          defval: null, // Use null as default for empty cells
+          raw: false    // Convert to type appropriate to the data
+        });
         
-        setPreviewData(parsedData.slice(0, 5)); // Show first 5 rows as preview
-        onDataReady(parsedData);
+        console.log("Parsed Excel data:", parsedData);
+        
+        // Validate required fields - Group No, Title
+        const validData = parsedData.filter((row: any) => {
+          return row['Group No'] && row['Title'];
+        });
+        
+        if (validData.length === 0) {
+          toast({
+            title: 'Invalid data',
+            description: 'Excel file must have columns: "Group No" and "Title"',
+            variant: 'destructive'
+          });
+          setIsLoading(false);
+          return;
+        }
+        
+        setPreviewData(validData.slice(0, 5)); // Show first 5 rows as preview
+        onDataReady(validData);
         setHasData(true);
         setIsLoading(false);
       } catch (error) {
         console.error('Error parsing Excel file:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to parse Excel file. Please check the format.',
+          variant: 'destructive'
+        });
         setIsLoading(false);
       }
     };
@@ -74,17 +101,17 @@ const useExcelImport = ({
           project: {
             group_no: groupNo,
             title: row['Title'] || '',
-            domain: row['Domain'] || '',
-            faculty_mentor: row['Faculty Mentor'] || '',
-            industry_mentor: row['Industry Mentor'] || '',
-            session: row['Session'] || '',
-            year: row['Year'] || '',
-            semester: row['Semester'] || '',
+            domain: row['Domain'] || null,
+            faculty_mentor: row['Faculty Mentor'] || null,
+            industry_mentor: row['Industry Mentor'] || null,
+            session: row['Session'] || null,
+            year: row['Year'] || null,
+            semester: row['Semester'] || null,
             faculty_coordinator: facultyCoordinator,
-            project_category: row['Project Category'] || '',
-            progress_form_url: row['Progress Form'] || '',
-            presentation_url: row['Presentation'] || '',
-            report_url: row['Report'] || '',
+            project_category: row['Project Category'] || null,
+            progress_form_url: row['Progress Form'] || null,
+            presentation_url: row['Presentation'] || null,
+            report_url: row['Report'] || null,
             initial_clarity_objectives: row['initial_clarity_objectives'] || null,
             initial_background_feasibility: row['initial_background_feasibility'] || null,
             initial_usability_applications: row['initial_usability_applications'] || null,
@@ -103,13 +130,13 @@ const useExcelImport = ({
         };
       }
       
-      // Add student if Roll No, Name, etc. exist
+      // Add student if Roll No AND Name exist (these are required)
       if (row['Roll No'] && row['Name']) {
         groups[groupNo].students.push({
           roll_no: row['Roll No'],
           name: row['Name'],
-          email: row['Email'] || '',
-          program: row['Program'] || '',
+          email: row['Email'] || null,
+          program: row['Program'] || null,
         });
       }
     });
@@ -122,19 +149,54 @@ const useExcelImport = ({
   };
   
   const handleImport = async () => {
-    if (!hasData) return;
+    if (!hasData || !file) {
+      toast({
+        title: 'No data',
+        description: 'Please upload an Excel file first.',
+        variant: 'destructive'
+      });
+      return;
+    }
     
     setIsImporting(true);
     
     try {
+      console.log("Importing Excel data...");
       const groups = groupStudentsByGroup(previewData);
+      console.log("Grouped data:", groups);
+      
       const totalGroups = groups.length;
+      if (totalGroups === 0) {
+        throw new Error('No valid groups found in the Excel file.');
+      }
+      
       let processedGroups = 0;
+      let failedGroups = 0;
       
       for (const group of groups) {
-        await addProject(group.project, group.students);
-        processedGroups++;
-        setImportProgress((processedGroups / totalGroups) * 100);
+        try {
+          console.log("Adding project:", group.project, "with students:", group.students);
+          await addProject(group.project, group.students);
+          processedGroups++;
+        } catch (error) {
+          console.error('Error adding project:', error, 'Project data:', group);
+          failedGroups++;
+        }
+        setImportProgress(Math.round((processedGroups / totalGroups) * 100));
+      }
+      
+      if (failedGroups > 0) {
+        toast({
+          title: 'Partial import success',
+          description: `Successfully imported ${processedGroups} groups. ${failedGroups} groups failed.`,
+          variant: 'warning'
+        });
+      } else {
+        toast({
+          title: 'Import success',
+          description: `Successfully imported all ${processedGroups} groups.`,
+          variant: 'default'
+        });
       }
       
       setIsImporting(false);
@@ -142,8 +204,16 @@ const useExcelImport = ({
       setPreviewData([]);
       setHasData(false);
       onClose();
+      
+      // Trigger refresh of data
+      window.dispatchEvent(new CustomEvent('refresh-project-data'));
     } catch (error) {
       console.error('Error importing data:', error);
+      toast({
+        title: 'Import failed',
+        description: error instanceof Error ? error.message : 'Failed to import data.',
+        variant: 'destructive'
+      });
       setIsImporting(false);
     }
   };

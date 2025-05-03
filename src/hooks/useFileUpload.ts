@@ -23,6 +23,8 @@ export function useFileUpload({ bucketName, entityId, fieldName, onUploadComplet
     setProgress(10);
 
     try {
+      console.log(`Uploading file for ${entityId} / ${fieldName}`);
+      
       // Create a unique file name to avoid conflicts
       const fileName = `${entityId}/${fieldName}/${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
       
@@ -34,6 +36,7 @@ export function useFileUpload({ bucketName, entityId, fieldName, onUploadComplet
         throw new Error('Failed to get file URL after upload');
       }
       
+      console.log('File uploaded successfully, URL:', fileUrl);
       setProgress(100);
       toast({
         title: 'Upload successful',
@@ -56,7 +59,8 @@ export function useFileUpload({ bucketName, entityId, fieldName, onUploadComplet
       return null;
     } finally {
       setIsUploading(false);
-      setProgress(0);
+      // Leave progress at 100 briefly before resetting
+      setTimeout(() => setProgress(0), 2000);
     }
   };
 

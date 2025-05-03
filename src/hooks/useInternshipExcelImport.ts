@@ -26,11 +26,29 @@ export function useInternshipExcelImport({ facultyCoordinator, onClose }: { facu
       const firstSheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[firstSheetName];
       
-      // Convert to JSON
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      // Convert to JSON with default values for empty cells
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+        defval: null,  // Set default value for empty cells
+        raw: false     // Convert to appropriate types
+      });
+      
+      // Validate required fields
+      const validData = jsonData.filter((row: any) => {
+        return row['roll_no'] && row['name'];
+      });
+      
+      if (validData.length === 0) {
+        toast({
+          title: 'Invalid data',
+          description: 'Excel file must have columns: "roll_no" and "name"',
+          variant: 'destructive'
+        });
+        setFile(null);
+        return;
+      }
       
       // Only show first 5 rows for preview
-      setPreviewData(jsonData.slice(0, 5));
+      setPreviewData(validData.slice(0, 5));
     } catch (error) {
       console.error('Error previewing Excel:', error);
       toast({
@@ -65,28 +83,41 @@ export function useInternshipExcelImport({ facultyCoordinator, onClose }: { facu
       const firstSheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[firstSheetName];
       
-      // Convert to JSON
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      // Convert to JSON with null for empty cells
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+        defval: null,
+        raw: false
+      });
+      
       setImportProgress(50);
       
       if (!Array.isArray(jsonData) || jsonData.length === 0) {
         throw new Error('No data found in the Excel file.');
       }
       
+      // Filter out rows without required fields
+      const filteredData = jsonData.filter((row: any) => {
+        return row.roll_no && row.name;
+      });
+      
+      if (filteredData.length === 0) {
+        throw new Error('No valid data found. Each row must have at least roll_no and name.');
+      }
+      
       // Process the data
-      console.log('Processing Excel data for internships:', jsonData);
+      console.log('Processing Excel data for internships:', filteredData);
       
       setImportProgress(70);
       
       // Send to server
-      const result = await processInternshipsExcel(jsonData, facultyCoordinator);
+      const result = await processInternshipsExcel(filteredData, facultyCoordinator);
       
       setImportProgress(100);
       
       if (result) {
         toast({
           title: 'Import Complete',
-          description: `Successfully processed ${jsonData.length} internships from Excel.`,
+          description: `Successfully processed ${filteredData.length} internships from Excel.`,
         });
         onClose();
         // Trigger refresh of data

@@ -17,7 +17,7 @@ const ProjectTableCellContent: React.FC<ProjectTableCellContentProps> = ({ value
   }
 
   // Handle regular values
-  return <>{value}</>;
+  return <>{String(value)}</>;
 };
 
 export default ProjectTableCellContent;

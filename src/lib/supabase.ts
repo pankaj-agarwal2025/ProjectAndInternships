@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -400,6 +399,21 @@ export const uploadFile = async (file: File, bucketName: string, filePath: strin
   try {
     console.log(`Uploading file to ${bucketName}/${filePath}`);
     
+    // Check if the bucket exists first
+    const { data: buckets, error: bucketError } = await supabase.storage.listBuckets();
+    
+    if (bucketError) {
+      console.error('Error checking buckets:', bucketError);
+      throw bucketError;
+    }
+    
+    const bucketExists = buckets.some(b => b.name === bucketName);
+    if (!bucketExists) {
+      console.error(`Bucket '${bucketName}' does not exist`);
+      throw new Error(`Storage bucket '${bucketName}' does not exist`);
+    }
+    
+    // Upload file
     const { data, error } = await supabase.storage
       .from(bucketName)
       .upload(filePath, file, {
