@@ -1,125 +1,204 @@
 
-import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import React, { useRef, useState } from 'react';
+import { useExcelImport } from '@/hooks/useExcelImport';
+import { useToast } from '@/components/ui/use-toast';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Upload, FileSpreadsheet } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
-import { Loader2, Upload } from 'lucide-react';
-import ImportFilters from './excel-import/ImportFilters';
-import useExcelImport from '@/hooks/useExcelImport';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface ImportExcelModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-const ImportExcelModal: React.FC<ImportExcelModalProps> = ({ isOpen, onClose }) => {
-  const [minStudents, setMinStudents] = useState(1);
-  const [maxStudents, setMaxStudents] = useState(4);
-  const [facultyData, setFacultyData] = useState<any>(null);
-  const [excelData, setExcelData] = useState<any[]>([]);
-
-  React.useEffect(() => {
-    const storedFaculty = sessionStorage.getItem('faculty');
-    if (storedFaculty) {
-      setFacultyData(JSON.parse(storedFaculty));
-    }
-  }, []);
-
-  const {
-    isLoading,
-    previewData,
-    handleFileChange,
-    handleImport,
-    hasData,
-    file,
-    isImporting,
-    importProgress
-  } = useExcelImport({
-    onDataReady: setExcelData,
-    facultyCoordinator: facultyData?.name || '',
-    onClose,
-    minStudents,
-    maxStudents
+const ImportExcelModal: React.FC<ImportExcelModalProps> = ({
+  isOpen,
+  onClose
+}) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const { importExcelFile, isImporting, importProgress, importError } = useExcelImport({ 
+    tableName: 'projects',
+    minStudents: 1,
+    maxStudents: 4
   });
-
-  const handleClose = () => {
-    setMinStudents(1);
-    setMaxStudents(4);
-    onClose();
+  const { toast } = useToast();
+  
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+        toast({
+          title: 'Invalid file format',
+          description: 'Please upload an Excel file (.xlsx or .xls)',
+          variant: 'destructive',
+        });
+        
+        // Reset the file input
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+        return;
+      }
+      
+      setSelectedFile(file);
+    }
   };
-
+  
+  const handleImportClick = async () => {
+    if (!selectedFile) {
+      toast({
+        title: 'No file selected',
+        description: 'Please select an Excel file to import.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    try {
+      const result = await importExcelFile(selectedFile);
+      
+      if (result.success) {
+        toast({
+          title: 'Import successful',
+          description: result.message,
+        });
+        
+        // Refresh the projects list
+        window.dispatchEvent(new Event('refresh-projects-data'));
+        
+        // Close the modal after a short delay
+        setTimeout(() => {
+          onClose();
+          // Reset the file input and selected file
+          setSelectedFile(null);
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
+        }, 1500);
+      } else {
+        toast({
+          title: 'Import failed',
+          description: result.message,
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error during import:', error);
+      toast({
+        title: 'Import error',
+        description: 'An unexpected error occurred during import.',
+        variant: 'destructive',
+      });
+    }
+  };
+  
+  const handleClose = () => {
+    if (!isImporting) {
+      onClose();
+      // Reset the file input and selected file
+      setSelectedFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+  
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Import Projects from Excel</DialogTitle>
         </DialogHeader>
         
-        <div className="space-y-6 max-h-[70vh] overflow-y-auto py-2">
-          <div className="space-y-2">
-            <Label htmlFor="excel-file">Upload Excel File</Label>
-            <Input
-              id="excel-file"
-              type="file"
-              accept=".xlsx,.xls"
-              onChange={handleFileChange}
-              disabled={isImporting}
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Excel file should contain columns: Group No*, Title*, Roll No*, Name*, Email, Program, Domain, Faculty Mentor, Industry Mentor, and optional file URLs. 
-              <br />
-              (* indicates required fields)
-            </p>
-          </div>
-          
-          <ImportFilters
-            minStudents={minStudents}
-            maxStudents={maxStudents}
-            onMinStudentsChange={setMinStudents}
-            onMaxStudentsChange={setMaxStudents}
-          />
-          
-          {isImporting && (
-            <div className="space-y-2">
-              <Label>Import Progress</Label>
-              <Progress value={importProgress} className="h-2" />
-              <p className="text-xs text-center">{Math.round(importProgress)}%</p>
-            </div>
-          )}
-          
-          {previewData && previewData.length > 0 && (
-            <div className="space-y-2">
-              <Label>Data Preview (First {previewData.length} rows)</Label>
-              <div className="max-h-60 overflow-y-auto border rounded-md p-2">
-                <pre className="text-xs">{JSON.stringify(previewData, null, 2)}</pre>
+        <ScrollArea className="max-h-[60vh]">
+          <div className="space-y-6">
+            <div className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+              <FileSpreadsheet className="h-10 w-10 text-gray-400 mb-4" />
+              <p className="text-sm text-gray-600 mb-2">
+                Upload an Excel file (.xlsx or .xls)
+              </p>
+              <p className="text-xs text-gray-500 mb-4">
+                The Excel file should contain columns: Group No, Title, Domain, etc.
+              </p>
+              
+              <div className="flex flex-col gap-4 w-full">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx, .xls"
+                  onChange={handleFileChange}
+                  className="hidden"
+                  disabled={isImporting}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isImporting}
+                  className="w-full"
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  Select File
+                </Button>
+                
+                {selectedFile && (
+                  <div className="bg-muted p-3 rounded-md">
+                    <p className="text-sm font-medium break-all">
+                      {selectedFile.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {Math.round(selectedFile.size / 1024)} KB
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
-          )}
-          
-          <div className="flex justify-end space-x-2">
-            <Button variant="outline" onClick={handleClose} disabled={isImporting}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleImport} 
-              disabled={isImporting || !file || !facultyData?.name}
-            >
-              {isImporting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Importing...
-                </>
-              ) : (
-                <>
-                  <Upload className="mr-2 h-4 w-4" />
-                  Import Data
-                </>
-              )}
-            </Button>
+            
+            {importError && (
+              <div className="bg-destructive/10 text-destructive p-3 rounded-md">
+                <p className="text-sm font-medium">Error</p>
+                <p className="text-xs">{importError}</p>
+              </div>
+            )}
+            
+            {isImporting && (
+              <div className="space-y-2">
+                <Progress value={importProgress} className="w-full h-2" />
+                <p className="text-xs text-center text-muted-foreground">
+                  Importing... {importProgress}%
+                </p>
+              </div>
+            )}
+            
+            <div className="space-y-2">
+              <h3 className="font-medium">Format Guidelines:</h3>
+              <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-1">
+                <li>The first row should contain column headers.</li>
+                <li>Required columns: "Group No", "Title".</li>
+                <li>Student columns should be named: "Student 1 Roll No", "Student 1 Name", etc.</li>
+                <li>Each project must have at least one student.</li>
+              </ul>
+            </div>
           </div>
-        </div>
+        </ScrollArea>
+        
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose} disabled={isImporting}>
+            Cancel
+          </Button>
+          <Button onClick={handleImportClick} disabled={!selectedFile || isImporting}>
+            {isImporting ? 'Importing...' : 'Import'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Project, Student } from '@/lib/supabase';
@@ -15,6 +14,7 @@ import EvaluationModal from './modals/EvaluationModal';
 import StudentModal from './modals/StudentModal';
 import { getDynamicColumns, getDynamicColumnValues, deleteDynamicColumn } from '@/lib/supabase';
 import { generateProjectPDF } from '@/components/ProjectExportPDF';
+import TableWrapper from './TableWrapper';
 import * as XLSX from 'xlsx';
 
 interface ProjectTableProps {
@@ -23,6 +23,7 @@ interface ProjectTableProps {
 
 const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [filteredProjects, setFilteredProjects] = useState<Project[]>([]);
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
   const [editProjectId, setEditProjectId] = useState<string | null>(null);
@@ -47,7 +48,27 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
   const [showEvaluationModal, setShowEvaluationModal] = useState(false);
   const [currentEvaluationProject, setCurrentEvaluationProject] = useState<Project | null>(null);
   const [evaluationType, setEvaluationType] = useState<'initial' | 'progress' | 'final'>('initial');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   const { toast } = useToast();
+
+  // update filtered projects when the projects or filters change
+  useEffect(() => {
+    setFilteredProjects(projects);
+    setCurrentPage(1); // Reset to first page when filters change
+  }, [projects, filters]);
+
+  // Get paginated projects
+  const getPaginatedProjects = () => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredProjects.slice(startIndex, endIndex);
+  };
+
+  // Handle page change
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
 
   useEffect(() => {
     fetchProjects();
@@ -106,6 +127,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
 
       if (projectsData) {
         setProjects(projectsData);
+        setFilteredProjects(projectsData);
         const values: Record<string, any[]> = {};
         for (const project of projectsData) {
           const dynamicValues = await getDynamicColumnValues(project.id);
@@ -158,7 +180,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
   const handleViewStudents = (projectId: string) => {
     const project = projects.find(p => p.id === projectId);
     if (project && project.students) {
-      setStudents(project.students);
+      setStudents(project.students as Student[]);
       setStudentUpdates({});
       setSelectedGroupId(projectId);
       setShowStudentModal(true);
@@ -310,53 +332,67 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <ProjectTableHeader dynamicColumns={dynamicColumns} handleDeleteColumn={handleDeleteColumn} />
-        <ProjectTableContent 
-          projects={projects}
-          selectedProjects={selectedProjects}
-          handleSelectProject={handleSelectProject}
-          editRowId={editRowId}
-          editedProject={editedProject}
-          handleInputChange={(e) => {
-            const { name, value } = e.target;
-            setEditedProject((prev) => ({ ...prev, [name]: value }));
-          }}
-          handleSaveRowEdit={async () => {
-            if (!editRowId) return;
-            setIsSaving(true);
-            try {
-              if (editedProject) {
-                await supabase
-                  .from('projects')
-                  .update(editedProject)
-                  .eq('id', editRowId);
-                fetchProjects();
-                setEditRowId(null);
-                setEditedProject({});
-                toast({
-                  title: 'Success',
-                  description: 'Project updated successfully!',
-                });
-              }
-            } catch (error) {
-              console.error('Error updating project:', error);
-              toast({
-                title: 'Error',
-                description: 'Failed to update project. Please try again.',
-                variant: 'destructive',
-              });
-            } finally {
-              setIsSaving(false);
-            }
-          }}
-          setEditRowId={setEditRowId}
-          isSaving={isSaving}
-          handleViewStudents={handleViewStudents}
-          dynamicColumns={dynamicColumns}
-          dynamicColumnValues={dynamicColumnValues}
-          handleShowEvaluation={handleShowEvaluation}
-          handleEditRow={handleEditRow}
+      <div className="overflow-hidden">
+        <TableWrapper
+          headerContent={
+            <ProjectTableHeader 
+              dynamicColumns={dynamicColumns} 
+              handleDeleteColumn={handleDeleteColumn} 
+            />
+          }
+          bodyContent={
+            <ProjectTableContent 
+              projects={getPaginatedProjects()}
+              selectedProjects={selectedProjects}
+              handleSelectProject={handleSelectProject}
+              editRowId={editRowId}
+              editedProject={editedProject}
+              handleInputChange={(e) => {
+                const { name, value } = e.target;
+                setEditedProject((prev) => ({ ...prev, [name]: value }));
+              }}
+              handleSaveRowEdit={async () => {
+                if (!editRowId) return;
+                setIsSaving(true);
+                try {
+                  if (editedProject) {
+                    await supabase
+                      .from('projects')
+                      .update(editedProject)
+                      .eq('id', editRowId);
+                    fetchProjects();
+                    setEditRowId(null);
+                    setEditedProject({});
+                    toast({
+                      title: 'Success',
+                      description: 'Project updated successfully!',
+                    });
+                  }
+                } catch (error) {
+                  console.error('Error updating project:', error);
+                  toast({
+                    title: 'Error',
+                    description: 'Failed to update project. Please try again.',
+                    variant: 'destructive',
+                  });
+                } finally {
+                  setIsSaving(false);
+                }
+              }}
+              setEditRowId={setEditRowId}
+              isSaving={isSaving}
+              handleViewStudents={handleViewStudents}
+              dynamicColumns={dynamicColumns}
+              dynamicColumnValues={dynamicColumnValues}
+              handleShowEvaluation={handleShowEvaluation}
+              handleEditRow={handleEditRow}
+            />
+          }
+          showPagination={true}
+          totalItems={filteredProjects.length}
+          itemsPerPage={itemsPerPage}
+          currentPage={currentPage}
+          onPageChange={handlePageChange}
         />
       </div>
 

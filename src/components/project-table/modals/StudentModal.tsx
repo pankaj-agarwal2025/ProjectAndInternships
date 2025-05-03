@@ -1,32 +1,32 @@
 
 import React from 'react';
+import { Student } from '@/lib/supabase';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from '@/components/ui/button';
-import { Student } from '@/lib/supabase';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Table,
-  TableHeader,
-  TableRow,
-  TableHead,
   TableBody,
   TableCell,
-} from '@/components/ui/table';
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 interface StudentModalProps {
   isOpen: boolean;
-  setIsOpen: (isOpen: boolean) => void;
+  setIsOpen: (open: boolean) => void;
   students: Student[];
   projectGroupNo: string;
 }
 
-const StudentModal: React.FC<StudentModalProps> = ({
+const StudentModal: React.FC<StudentModalProps> = ({ 
   isOpen,
   setIsOpen,
   students,
@@ -34,14 +34,12 @@ const StudentModal: React.FC<StudentModalProps> = ({
 }) => {
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent className="max-w-4xl">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Students for Group {projectGroupNo}</DialogTitle>
-          <DialogDescription>
-            Here are the students associated with this project.
-          </DialogDescription>
+          <DialogTitle>Students in Group {projectGroupNo}</DialogTitle>
         </DialogHeader>
-        <div className="mt-4 border rounded-md overflow-hidden">
+        
+        <ScrollArea className="h-[60vh] rounded-md border p-4">
           <Table>
             <TableHeader>
               <TableRow>
@@ -54,13 +52,13 @@ const StudentModal: React.FC<StudentModalProps> = ({
             <TableBody>
               {students.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-4">
-                    No students found for this project.
+                  <TableCell colSpan={4} className="text-center">
+                    No students found for this group.
                   </TableCell>
                 </TableRow>
               ) : (
-                students.map((student) => (
-                  <TableRow key={student.id} className="hover:bg-gray-50">
+                students.map(student => (
+                  <TableRow key={student.id}>
                     <TableCell>{student.roll_no}</TableCell>
                     <TableCell>{student.name}</TableCell>
                     <TableCell>{student.email}</TableCell>
@@ -70,7 +68,8 @@ const StudentModal: React.FC<StudentModalProps> = ({
               )}
             </TableBody>
           </Table>
-        </div>
+        </ScrollArea>
+        
         <DialogFooter>
           <Button onClick={() => setIsOpen(false)}>Close</Button>
         </DialogFooter>
