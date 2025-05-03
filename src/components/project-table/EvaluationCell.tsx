@@ -93,7 +93,7 @@ const EvaluationCell: React.FC<EvaluationCellProps> = ({
         onClick={onShowEvaluation}
       >
         <Edit className="h-3 w-3 mr-1" />
-        Edit {totalValue || 0}/{maxTotal}
+        Edit {String(totalValue || 0)}/{maxTotal}
       </Button>
     );
   }
