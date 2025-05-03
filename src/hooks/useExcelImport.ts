@@ -1,148 +1,188 @@
 
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { useToast } from '@/components/ui/use-toast';
-import { processProjectsExcel, processInternshipsExcel } from '@/lib/supabase';
+import { processProjectsExcel } from '@/lib/supabase';
 
-interface UseExcelImportProps {
+export interface UseExcelImportProps {
   onDataReady: (data: any[]) => void;
-  validateRow?: (row: any) => boolean;
-  transformRow?: (row: any) => any;
-  facultyCoordinator?: string;
-  onClose?: () => void;
+  facultyCoordinator: string;
+  onClose: () => void;
 }
 
-export function useExcelImport({ onDataReady, validateRow, transformRow, facultyCoordinator, onClose }: UseExcelImportProps) {
+const useExcelImport = ({ onDataReady, facultyCoordinator, onClose }: UseExcelImportProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [previewData, setPreviewData] = useState<any[]>([]);
+  const [hasData, setHasData] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const { toast } = useToast();
 
-  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
 
-    setFile(selectedFile);
     setIsLoading(true);
-
+    setFile(selectedFile);
+    
     const reader = new FileReader();
-    reader.onload = (event) => {
+    
+    reader.onload = (evt) => {
       try {
-        const data = new Uint8Array(event.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
+        const binaryStr = evt.target?.result;
+        const workbook = XLSX.read(binaryStr, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const data = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
         
-        // Get first sheet
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
+        if (data.length === 0) {
+          toast({
+            title: 'Error',
+            description: 'The Excel file is empty or has no valid data.',
+            variant: 'destructive',
+          });
+          setIsLoading(false);
+          setHasData(false);
+          return;
+        }
         
-        // Convert to json
-        const jsonData = XLSX.utils.sheet_to_json(worksheet);
-        
-        // Validate and transform data if needed
-        const processedData = jsonData
-          .filter(row => !validateRow || validateRow(row))
-          .map(row => transformRow ? transformRow(row) : row);
-        
-        // Set preview data
-        setPreviewData(processedData.slice(0, 5));
-        
-        // Pass data to parent
-        onDataReady(processedData);
+        // Show preview of first 5 rows
+        const preview = data.slice(0, 5);
+        setPreviewData(preview);
+        setHasData(true);
+        onDataReady(data);
         
         toast({
-          title: 'Excel file loaded',
-          description: `${processedData.length} rows found for preview.`,
+          title: 'File loaded',
+          description: `Loaded ${data.length} rows from Excel file.`,
         });
       } catch (error) {
         console.error('Error parsing Excel file:', error);
         toast({
           title: 'Error',
-          description: 'Failed to parse Excel file. Please check the format.',
+          description: 'Failed to parse the Excel file. Please check the file format.',
           variant: 'destructive',
         });
+        setHasData(false);
       } finally {
         setIsLoading(false);
       }
     };
-
+    
     reader.onerror = () => {
       toast({
         title: 'Error',
-        description: 'Failed to read Excel file.',
+        description: 'Failed to read the Excel file.',
         variant: 'destructive',
       });
       setIsLoading(false);
+      setHasData(false);
     };
+    
+    reader.readAsBinaryString(selectedFile);
+  };
 
-    reader.readAsArrayBuffer(selectedFile);
-  }, [onDataReady, toast, validateRow, transformRow]);
-
-  const handleImport = useCallback(async () => {
-    if (!file || !facultyCoordinator) {
+  const handleImport = async () => {
+    if (!hasData || !file) {
       toast({
-        title: 'No file selected or faculty coordinator missing',
-        description: 'Please select an Excel file and ensure faculty coordinator is set.',
+        title: 'Error',
+        description: 'No data to import.',
         variant: 'destructive',
       });
-      return false;
+      return;
+    }
+    
+    if (!facultyCoordinator) {
+      toast({
+        title: 'Error',
+        description: 'Faculty coordinator information is missing.',
+        variant: 'destructive',
+      });
+      return;
     }
     
     setIsImporting(true);
     setImportProgress(10);
     
     try {
-      // Process the data based on the current path
-      const isProjectData = window.location.pathname.includes('project');
+      // Process Excel data
+      setImportProgress(30);
       
-      if (isProjectData) {
-        await processProjectsExcel(previewData, facultyCoordinator);
-      } else {
-        await processInternshipsExcel(previewData, facultyCoordinator);
-      }
+      const reader = new FileReader();
       
-      setImportProgress(100);
-      
-      toast({
-        title: 'Import Successful',
-        description: `Data has been successfully imported.`,
-      });
-      
-      // Close the modal after successful import
-      if (onClose) {
-        setTimeout(() => {
+      reader.onload = async (evt) => {
+        try {
+          const binaryStr = evt.target?.result;
+          const workbook = XLSX.read(binaryStr, { type: 'binary' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const data = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+          
+          setImportProgress(50);
+          
+          // Process and insert data
+          await processProjectsExcel(data, facultyCoordinator);
+          
+          setImportProgress(100);
+          
+          toast({
+            title: 'Import successful',
+            description: `Successfully imported ${data.length} projects.`,
+          });
+          
+          // Trigger data refresh in parent component
+          window.dispatchEvent(new CustomEvent('refresh-project-data'));
+          
+          // Close modal
           onClose();
-          setFile(null);
-          setPreviewData([]);
+        } catch (error) {
+          console.error('Error processing Excel data:', error);
+          toast({
+            title: 'Import failed',
+            description: 'Failed to import data. Please check the Excel file format.',
+            variant: 'destructive',
+          });
+        } finally {
+          setIsImporting(false);
           setImportProgress(0);
-        }, 1500);
-      }
+        }
+      };
       
-      return true;
+      reader.onerror = () => {
+        toast({
+          title: 'Error',
+          description: 'Failed to read the Excel file.',
+          variant: 'destructive',
+        });
+        setIsImporting(false);
+        setImportProgress(0);
+      };
+      
+      reader.readAsBinaryString(file);
+      
     } catch (error) {
       console.error('Error importing data:', error);
       toast({
-        title: 'Import Failed',
-        description: 'An error occurred while importing data. Please try again.',
+        title: 'Import failed',
+        description: 'Failed to import data. Please try again.',
         variant: 'destructive',
       });
-      return false;
-    } finally {
       setIsImporting(false);
+      setImportProgress(0);
     }
-  }, [file, previewData, facultyCoordinator, toast, onClose]);
+  };
 
   return {
     isLoading,
     previewData,
     handleFileChange,
     handleImport,
-    hasData: previewData.length > 0,
+    hasData,
     file,
     isImporting,
     importProgress
   };
-}
+};
 
 export default useExcelImport;

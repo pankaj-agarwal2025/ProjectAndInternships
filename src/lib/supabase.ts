@@ -398,6 +398,8 @@ export const addInternshipDynamicColumnValue = async (columnId: string, internsh
 // File upload utility
 export const uploadFile = async (file: File, bucketName: string, filePath: string) => {
   try {
+    console.log(`Uploading file to ${bucketName}/${filePath}`);
+    
     const { data, error } = await supabase.storage
       .from(bucketName)
       .upload(filePath, file, {
@@ -415,6 +417,7 @@ export const uploadFile = async (file: File, bucketName: string, filePath: strin
       .from(bucketName)
       .getPublicUrl(data.path);
 
+    console.log('File uploaded successfully, public URL:', publicUrl.publicUrl);
     return publicUrl.publicUrl;
   } catch (error) {
     console.error('Error in uploadFile:', error);

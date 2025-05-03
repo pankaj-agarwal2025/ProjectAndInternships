@@ -3,32 +3,21 @@ import React from 'react';
 import { Student } from '@/lib/supabase';
 
 interface ProjectTableCellContentProps {
-  value: any;
+  value: string | number | Student[] | null | undefined;
 }
 
 const ProjectTableCellContent: React.FC<ProjectTableCellContentProps> = ({ value }) => {
   if (value === null || value === undefined) {
-    return <></>;
+    return <>—</>;
   }
-  
-  // Handle Student array objects specifically
-  if (Array.isArray(value) && value.length > 0) {
-    // Check if it's an array of Student objects
-    if (typeof value[0] === 'object' && 'name' in value[0]) {
-      return (
-        <ul className="list-disc list-inside">
-          {value.map((item: Student, idx: number) => (
-            <li key={idx}>{item.name}</li>
-          ))}
-        </ul>
-      );
-    }
-    
-    return <>{value.join(', ')}</>;
+
+  // Handle Student arrays
+  if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object' && 'roll_no' in value[0]) {
+    return <>{value.length} student(s)</>;
   }
-  
-  // Convert to string for proper displaying
-  return <>{String(value)}</>;
+
+  // Handle regular values
+  return <>{value}</>;
 };
 
 export default ProjectTableCellContent;

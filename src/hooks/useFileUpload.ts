@@ -24,7 +24,7 @@ export function useFileUpload({ bucketName, entityId, fieldName, onUploadComplet
 
     try {
       // Create a unique file name to avoid conflicts
-      const fileName = `${entityId}/${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
+      const fileName = `${entityId}/${fieldName}/${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
       
       // Upload the file to Supabase storage
       setProgress(30);

@@ -22,12 +22,12 @@ const PdfFieldCell: React.FC<PdfFieldCellProps> = ({
   label,
   isEditing 
 }) => {
-  const [fileForUpload, setFileForUpload] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
 
-  const handleUploadFile = async () => {
-    if (!fileForUpload) {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) {
       toast({
         title: 'Error',
         description: 'Please select a file to upload.',
@@ -38,11 +38,11 @@ const PdfFieldCell: React.FC<PdfFieldCellProps> = ({
 
     try {
       setIsSaving(true);
-      const fileName = `${projectId}/${field}/${fileForUpload.name}`;
-      const fileUrl = await uploadFile(fileForUpload, 'projects', fileName);
+      const fileName = `${projectId}/${field}/${file.name.replace(/\s+/g, '_')}`;
+      const fileUrl = await uploadFile(file, 'projects', fileName);
       
       if (fileUrl) {
-        // It's a built-in field
+        // Update the project with the new file URL
         await supabase
           .from('projects')
           .update({ [field]: fileUrl })
@@ -64,7 +64,6 @@ const PdfFieldCell: React.FC<PdfFieldCellProps> = ({
         variant: 'destructive',
       });
     } finally {
-      setFileForUpload(null);
       setIsSaving(false);
     }
   };
@@ -78,22 +77,28 @@ const PdfFieldCell: React.FC<PdfFieldCellProps> = ({
           defaultValue={value || ''}
         />
         <div className="flex space-x-2">
-          <Button size="sm" variant="outline" onClick={() => {
-            document.getElementById(`file-upload-${field}-${projectId}`)?.click();
-          }}>
-            <File className="h-4 w-4 mr-1" /> Choose File
+          <Button 
+            size="sm" 
+            variant="outline" 
+            onClick={() => {
+              document.getElementById(`file-upload-${field}-${projectId}`)?.click();
+            }}
+            disabled={isSaving}
+          >
+            {isSaving ? (
+              'Uploading...'
+            ) : (
+              <>
+                <File className="h-4 w-4 mr-1" /> Choose File
+              </>
+            )}
           </Button>
           <input
             id={`file-upload-${field}-${projectId}`}
             type="file"
             accept=".pdf"
             className="hidden"
-            onChange={(e) => {
-              if (e.target.files && e.target.files[0]) {
-                setFileForUpload(e.target.files[0]);
-                handleUploadFile();
-              }
-            }}
+            onChange={handleFileChange}
           />
           <Button 
             size="sm" 
