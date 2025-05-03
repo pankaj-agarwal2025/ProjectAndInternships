@@ -13,7 +13,11 @@ const ProjectTableCellContent: React.FC<ProjectTableCellContentProps> = ({ value
 
   // Handle Student arrays
   if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object' && 'roll_no' in value[0]) {
-    return <>{value.length} student(s)</>;
+    return (
+      <>
+        {value.length} student(s)
+      </>
+    );
   }
 
   // Handle regular values

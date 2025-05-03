@@ -8,9 +8,11 @@ export interface UseExcelImportProps {
   onDataReady: (data: any[]) => void;
   facultyCoordinator: string;
   onClose: () => void;
+  minStudents?: number;
+  maxStudents?: number;
 }
 
-const useExcelImport = ({ onDataReady, facultyCoordinator, onClose }: UseExcelImportProps) => {
+const useExcelImport = ({ onDataReady, facultyCoordinator, onClose, minStudents = 1, maxStudents = 4 }: UseExcelImportProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [hasData, setHasData] = useState(false);
@@ -122,7 +124,7 @@ const useExcelImport = ({ onDataReady, facultyCoordinator, onClose }: UseExcelIm
           setImportProgress(50);
           
           // Process and insert data
-          await processProjectsExcel(data, facultyCoordinator);
+          await processProjectsExcel(data, facultyCoordinator, minStudents, maxStudents);
           
           setImportProgress(100);
           

@@ -70,7 +70,7 @@ const EvaluationCell: React.FC<EvaluationCellProps> = ({
             <li key={field.id} className="flex justify-between">
               <span>{field.name}</span>
               <span>
-                <ProjectTableCellContent value={fieldValue} />/{field.maxMarks}
+                {String(fieldValue || 0)}/{field.maxMarks}
               </span>
             </li>
           );
@@ -78,7 +78,7 @@ const EvaluationCell: React.FC<EvaluationCellProps> = ({
         <li className="font-bold border-t pt-1 mt-1">
           <span>Total</span>
           <span>
-            <ProjectTableCellContent value={totalValue} />/{maxTotal}
+            {String(totalValue || 0)}/{maxTotal}
           </span>
         </li>
       </ul>
