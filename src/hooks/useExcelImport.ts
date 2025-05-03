@@ -117,7 +117,7 @@ export function useExcelImport({ tableName, minStudents = 1, maxStudents = 4 }: 
     }
     
     // Prepare project data
-    const projectData = {
+    const projectDataToInsert = {
       group_no: String(record['Group No']),
       title: String(record['Title']),
       domain: record['Domain'] ? String(record['Domain']) : null,
@@ -131,21 +131,21 @@ export function useExcelImport({ tableName, minStudents = 1, maxStudents = 4 }: 
     };
     
     // Insert the project
-    const { data: projectData, error: projectError } = await supabase
+    const { data: insertedProject, error: projectError } = await supabase
       .from('projects')
-      .insert(projectData)
+      .insert(projectDataToInsert)
       .select()
       .single();
       
-    if (projectError) {
-      throw projectError;
+    if (projectError || !insertedProject) {
+      throw projectError || new Error('Failed to insert project');
     }
     
     // Insert the students
     if (students.length > 0) {
       const studentsWithGroupId = students.map(student => ({
         ...student,
-        group_id: projectData.id
+        group_id: insertedProject.id
       }));
       
       const { error: studentsError } = await supabase
@@ -195,3 +195,5 @@ export function useExcelImport({ tableName, minStudents = 1, maxStudents = 4 }: 
     importError
   };
 }
+
+export default useExcelImport;

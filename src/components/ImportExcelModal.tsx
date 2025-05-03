@@ -114,7 +114,7 @@ const ImportExcelModal: React.FC<ImportExcelModalProps> = ({
   
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Import Projects from Excel</DialogTitle>
         </DialogHeader>

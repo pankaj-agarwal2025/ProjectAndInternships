@@ -34,7 +34,7 @@ const StudentModal: React.FC<StudentModalProps> = ({
 }) => {
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[80vh]">
         <DialogHeader>
           <DialogTitle>Students in Group {projectGroupNo}</DialogTitle>
         </DialogHeader>

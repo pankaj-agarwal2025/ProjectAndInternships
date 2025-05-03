@@ -9,7 +9,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import ProjectTableCellContent from './ProjectTableCellContent';
 
 interface EvaluationCellProps {
   project: Project;
@@ -70,7 +69,7 @@ const EvaluationCell: React.FC<EvaluationCellProps> = ({
             <li key={field.id} className="flex justify-between">
               <span>{field.name}</span>
               <span>
-                {String(fieldValue || 0)}/{field.maxMarks}
+                {typeof fieldValue === 'number' ? fieldValue : 0}/{field.maxMarks}
               </span>
             </li>
           );
@@ -78,7 +77,7 @@ const EvaluationCell: React.FC<EvaluationCellProps> = ({
         <li className="font-bold border-t pt-1 mt-1">
           <span>Total</span>
           <span>
-            {String(totalValue || 0)}/{maxTotal}
+            {typeof totalValue === 'number' ? totalValue : 0}/{maxTotal}
           </span>
         </li>
       </ul>
@@ -93,7 +92,7 @@ const EvaluationCell: React.FC<EvaluationCellProps> = ({
         onClick={onShowEvaluation}
       >
         <Edit className="h-3 w-3 mr-1" />
-        Edit {String(totalValue || 0)}/{maxTotal}
+        Edit {typeof totalValue === 'number' ? totalValue : 0}/{maxTotal}
       </Button>
     );
   }
@@ -107,7 +106,7 @@ const EvaluationCell: React.FC<EvaluationCellProps> = ({
             size="sm" 
             onClick={onShowEvaluation}
           >
-            {String(totalValue || 0)}/{maxTotal} <Info className="h-3 w-3 ml-1" />
+            {typeof totalValue === 'number' ? totalValue : 0}/{maxTotal} <Info className="h-3 w-3 ml-1" />
           </Button>
         </TooltipTrigger>
         <TooltipContent side="right" className="w-64">
