@@ -504,7 +504,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
     }
     
     try {
-      await deleteDynamicColumn(columnId);
+      await deleteDynamicColumn(columnToDelete);
       fetchDynamicColumns();
       const updatedValues = { ...dynamicColumnValues };
       Object.keys(updatedValues).forEach(projectId => {

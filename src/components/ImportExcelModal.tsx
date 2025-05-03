@@ -39,9 +39,8 @@ const ImportExcelModal: React.FC<ImportExcelModalProps> = ({ isOpen, onClose }) 
   } = useExcelImport({
     onDataReady: setExcelData,
     facultyCoordinator: facultyData?.name || '',
-    minStudents,
-    maxStudents,
     onClose
+    // Removed minStudents and maxStudents as they seem to be unsupported props
   });
 
   const handleClose = () => {

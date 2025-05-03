@@ -9,6 +9,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import ProjectTableCellContent from './ProjectTableCellContent';
 
 interface EvaluationCellProps {
   project: Project;
@@ -53,6 +54,7 @@ const EvaluationCell: React.FC<EvaluationCellProps> = ({
   onShowEvaluation
 }) => {
   const totalField = `${type}_total`;
+  // Use type assertion to get totalValue from project
   const totalValue = project[totalField as keyof Project];
   
   const fields = getEvaluationFields(type);
@@ -62,15 +64,22 @@ const EvaluationCell: React.FC<EvaluationCellProps> = ({
     <div className="p-2">
       <h4 className="font-bold mb-2">{type.charAt(0).toUpperCase() + type.slice(1)} Evaluation</h4>
       <ul className="space-y-1">
-        {fields.map(field => (
-          <li key={field.id} className="flex justify-between">
-            <span>{field.name}</span>
-            <span>{project[field.id as keyof Project] || 0}/{field.maxMarks}</span>
-          </li>
-        ))}
+        {fields?.map(field => {
+          const fieldValue = project[field.id as keyof Project];
+          return (
+            <li key={field.id} className="flex justify-between">
+              <span>{field.name}</span>
+              <span>
+                <ProjectTableCellContent value={fieldValue || 0} />/{field.maxMarks}
+              </span>
+            </li>
+          );
+        })}
         <li className="font-bold border-t pt-1 mt-1">
           <span>Total</span>
-          <span>{totalValue || 0}/{maxTotal}</span>
+          <span>
+            <ProjectTableCellContent value={totalValue || 0} />/{maxTotal}
+          </span>
         </li>
       </ul>
     </div>
@@ -84,7 +93,7 @@ const EvaluationCell: React.FC<EvaluationCellProps> = ({
         onClick={onShowEvaluation}
       >
         <Edit className="h-3 w-3 mr-1" />
-        Edit {(totalValue || 0)}/{maxTotal}
+        Edit {totalValue || 0}/{maxTotal}
       </Button>
     );
   }
@@ -98,7 +107,7 @@ const EvaluationCell: React.FC<EvaluationCellProps> = ({
             size="sm" 
             onClick={onShowEvaluation}
           >
-            {totalValue || 0}/{maxTotal} <Info className="h-3 w-3 ml-1" />
+            {String(totalValue || 0)}/{maxTotal} <Info className="h-3 w-3 ml-1" />
           </Button>
         </TooltipTrigger>
         <TooltipContent side="right" className="w-64">
