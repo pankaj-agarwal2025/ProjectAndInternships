@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { addProject } from '@/lib/supabase';
@@ -8,7 +7,6 @@ export interface UseExcelImportProps {
   onDataReady: (data: any[]) => void;
   facultyCoordinator: string;
   onClose: () => void;
-  // Adding minStudents and maxStudents props
   minStudents?: number;
   maxStudents?: number;
 }
