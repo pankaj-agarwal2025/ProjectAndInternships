@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { Student } from '@/lib/supabase';
 
 interface ProjectTableCellContentProps {
   value: any;
@@ -10,13 +11,13 @@ const ProjectTableCellContent: React.FC<ProjectTableCellContentProps> = ({ value
     return <></>;
   }
   
-  if (Array.isArray(value)) {
-    if (value.length === 0) return <>None</>;
-    
+  // Handle Student array objects specifically
+  if (Array.isArray(value) && value.length > 0) {
+    // Check if it's an array of Student objects
     if (typeof value[0] === 'object' && 'name' in value[0]) {
       return (
         <ul className="list-disc list-inside">
-          {value.map((item: any, idx: number) => (
+          {value.map((item: Student, idx: number) => (
             <li key={idx}>{item.name}</li>
           ))}
         </ul>
