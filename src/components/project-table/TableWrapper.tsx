@@ -1,5 +1,5 @@
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef } from 'react';
 import {
   Table,
   TableHeader,
@@ -26,8 +26,6 @@ const TableWrapper: React.FC<TableWrapperProps> = ({
   onPageChange = () => {},
 }) => {
   const tableContainerRef = useRef<HTMLDivElement>(null);
-  
-  // We don't need separate refs for header and content anymore as we're using a single scrollable container
   
   return (
     <div className="flex flex-col">

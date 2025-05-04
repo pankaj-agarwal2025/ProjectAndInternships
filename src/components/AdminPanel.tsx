@@ -21,7 +21,15 @@ import {
 } from '@/components/ui/table';
 import { Faculty } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
-import { UsersRound, UserPlus, Trash2, Eye } from 'lucide-react';
+import { UsersRound, UserPlus, Trash2, Eye, Pencil } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import TableWrapper from './project-table/TableWrapper';
 
 interface AdminPanelProps {
   currentFaculty: Faculty;
@@ -35,6 +43,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentFaculty }) => {
   const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [showTeachers, setShowTeachers] = useState(false);
   const { toast } = useToast();
+  
+  // Edit faculty states
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editFaculty, setEditFaculty] = useState<Faculty | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editUsername, setEditUsername] = useState('');
+  const [editPassword, setEditPassword] = useState('');
 
   useEffect(() => {
     if (showTeachers) {
@@ -136,6 +151,96 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentFaculty }) => {
       toast({
         title: 'Error',
         description: 'Failed to add faculty member. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleEditClick = (faculty: Faculty) => {
+    setEditFaculty(faculty);
+    setEditName(faculty.name);
+    setEditUsername(faculty.username);
+    setEditPassword(''); // Don't populate password for security reasons
+    setEditModalOpen(true);
+  };
+
+  const handleUpdateFaculty = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!editFaculty || !editName || !editUsername) {
+      toast({
+        title: 'Missing fields',
+        description: 'Please fill out all required fields.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      // Check if the updated username conflicts with another faculty
+      if (editUsername !== editFaculty.username) {
+        const { data: existingFaculty, error: checkError } = await supabase
+          .from('faculties')
+          .select('id')
+          .eq('username', editUsername.trim())
+          .maybeSingle();
+
+        if (checkError) {
+          throw checkError;
+        }
+
+        if (existingFaculty && existingFaculty.id !== editFaculty.id) {
+          toast({
+            title: 'Username exists',
+            description: 'This username is already taken. Please choose another one.',
+            variant: 'destructive',
+          });
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
+      // Prepare update data
+      const updateData: { name: string; username: string; password?: string } = {
+        name: editName.trim(),
+        username: editUsername.trim(),
+      };
+      
+      // Only include password if it was changed
+      if (editPassword) {
+        updateData.password = editPassword;
+      }
+
+      // Update faculty
+      const { error: updateError } = await supabase
+        .from('faculties')
+        .update(updateData)
+        .eq('id', editFaculty.id);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      toast({
+        title: 'Faculty updated',
+        description: 'The faculty member has been updated successfully.',
+      });
+
+      // Close modal
+      setEditModalOpen(false);
+      
+      // Refresh faculty list
+      fetchFaculties();
+
+    } catch (error) {
+      console.error('Error updating faculty:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update faculty member. Please try again.',
         variant: 'destructive',
       });
     } finally {
@@ -258,17 +363,17 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentFaculty }) => {
           
           {showTeachers && (
             <div className="border rounded-md">
-              <Table>
-                <TableHeader>
+              <TableWrapper
+                headerContent={
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Username</TableHead>
                     <TableHead>Role</TableHead>
-                    <TableHead className="w-[100px]">Actions</TableHead>
+                    <TableHead className="w-[140px]">Actions</TableHead>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {faculties.length === 0 ? (
+                }
+                bodyContent={
+                  faculties.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={4} className="text-center py-4">
                         No faculty members found
@@ -285,25 +390,86 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentFaculty }) => {
                           </span>
                         </TableCell>
                         <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteFaculty(faculty.id)}
-                            disabled={faculty.id === currentFaculty.id}
-                            title={faculty.id === currentFaculty.id ? "Cannot delete your own account" : "Delete faculty"}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEditClick(faculty)}
+                              title="Edit faculty"
+                            >
+                              <Pencil className="h-4 w-4 text-primary" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteFaculty(faculty.id)}
+                              disabled={faculty.id === currentFaculty.id}
+                              title={faculty.id === currentFaculty.id ? "Cannot delete your own account" : "Delete faculty"}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))
-                  )}
-                </TableBody>
-              </Table>
+                  )
+                }
+              />
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Edit Faculty Modal */}
+      <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Faculty</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleUpdateFaculty} className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Full Name</Label>
+              <Input
+                id="edit-name"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="Dr. Jane Doe"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-username">Username</Label>
+              <Input
+                id="edit-username"
+                value={editUsername}
+                onChange={(e) => setEditUsername(e.target.value)}
+                placeholder="janedoe"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-password">
+                Password (leave blank to keep current password)
+              </Label>
+              <Input
+                id="edit-password"
+                type="password"
+                value={editPassword}
+                onChange={(e) => setEditPassword(e.target.value)}
+                placeholder="••••••••"
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? 'Updating...' : 'Update Faculty'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
