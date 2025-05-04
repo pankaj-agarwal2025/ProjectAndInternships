@@ -82,14 +82,11 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    let numValue: number | string = parseInt(value);
-    if (isNaN(numValue)) {
-      numValue = '';
-    }
+    let numValue: number | null = value === '' ? null : Number(value);
     
     // Find the field to get its max marks
     const field = fields?.find(f => f.id === name);
-    if (field && numValue > field.maxMarks) {
+    if (field && typeof numValue === 'number' && numValue > field.maxMarks) {
       numValue = field.maxMarks;
     }
 
@@ -99,8 +96,8 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
   const calculateTotal = () => {
     if (!fields) return 0;
     return fields.reduce((acc, field) => {
-      const value = localEditedProject[field.id as keyof Project] as number | undefined;
-      return acc + (value || 0);
+      const value = localEditedProject[field.id as keyof Project];
+      return acc + (typeof value === 'number' ? value : 0);
     }, 0);
   };
 
@@ -110,17 +107,16 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
     setIsSaving(true);
     try {
       const totalValue = calculateTotal();
-      const updatedProject = {
-        ...localEditedProject,
+      const updatedProject: Record<string, any> = {
+        ...Object.fromEntries(
+          Object.entries(localEditedProject).filter(([key, value]) => 
+            fields?.some(field => field.id === key) && value !== undefined
+          )
+        ),
         [totalField]: totalValue
       };
       
-      // Remove any undefined values
-      Object.keys(updatedProject).forEach(key => {
-        if (updatedProject[key as keyof typeof updatedProject] === undefined) {
-          delete updatedProject[key as keyof typeof updatedProject];
-        }
-      });
+      console.log('Saving evaluation with data:', updatedProject);
       
       const { error } = await supabase
         .from('projects')
@@ -152,7 +148,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {evaluationType.charAt(0).toUpperCase() + evaluationType.slice(1)} Evaluation
@@ -172,7 +168,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
                     id={field.id}
                     name={field.id}
                     type="number"
-                    value={fieldValue !== undefined ? fieldValue : ''}
+                    value={typeof fieldValue === 'number' ? fieldValue : ''}
                     onChange={handleInputChange}
                     min={0}
                     max={field.maxMarks}

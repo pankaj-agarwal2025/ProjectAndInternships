@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { processInternshipsExcel } from '@/lib/supabase';
@@ -10,6 +9,64 @@ export function useInternshipExcelImport({ facultyCoordinator, onClose }: { facu
   const [importProgress, setImportProgress] = useState(0);
   const [previewData, setPreviewData] = useState<any[]>([]);
   const { toast } = useToast();
+
+  // Define column name mappings for flexibility
+  const columnMappings: Record<string, string[]> = {
+    'roll_no': ['roll_no', 'roll no', 'rollno', 'student id', 'id', 'student roll no'],
+    'name': ['name', 'student name', 'full name'],
+    'email': ['email', 'email address', 'student email'],
+    'phone_no': ['phone_no', 'phone no', 'mobile', 'contact', 'phone number'],
+    'domain': ['domain', 'field', 'area'],
+    'organization_name': ['organization_name', 'organization name', 'company', 'company name', 'org name'],
+    'position': ['position', 'title', 'role'],
+    'stipend': ['stipend', 'salary', 'payment'],
+    'starting_date': ['starting_date', 'starting date', 'start date', 'from date'],
+    'ending_date': ['ending_date', 'ending date', 'end date', 'to date'],
+    'session': ['session'],
+    'year': ['year'],
+    'semester': ['semester'],
+    'program': ['program', 'course', 'degree']
+  };
+
+  // Helper function to normalize column names
+  const normalizeColumnName = (name: string): string => {
+    return name.toString().trim().toLowerCase().replace(/\s+/g, '_');
+  };
+
+  // Helper function to find the standardized key for a given column name
+  const findStandardKey = (columnName: string): string | null => {
+    const normalized = normalizeColumnName(columnName);
+    
+    for (const [standardKey, variations] of Object.entries(columnMappings)) {
+      if (variations.some(v => normalizeColumnName(v) === normalized)) {
+        return standardKey;
+      }
+    }
+    
+    return null;
+  };
+
+  // Helper function to map Excel data to our expected format
+  const mapRowData = (row: Record<string, any>): Record<string, any> => {
+    const result: Record<string, any> = {};
+    
+    // Go through each original column in the row
+    for (const [originalColumn, value] of Object.entries(row)) {
+      const standardKey = findStandardKey(originalColumn);
+      if (standardKey) {
+        result[standardKey] = value;
+      } else {
+        // Keep original column name if no mapping found
+        result[normalizeColumnName(originalColumn)] = value;
+      }
+    }
+    
+    // Ensure required fields are present
+    if (!result.roll_no && result.id) result.roll_no = result.id;
+    if (!result.name && result.student_name) result.name = result.student_name;
+    
+    return result;
+  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -32,15 +89,16 @@ export function useInternshipExcelImport({ facultyCoordinator, onClose }: { facu
         raw: false     // Convert to appropriate types
       });
       
-      // Validate required fields
-      const validData = jsonData.filter((row: any) => {
-        return row['roll_no'] && row['name'];
-      });
+      // Map the data using our flexible column mappings
+      const mappedData = jsonData.map(mapRowData);
       
-      if (validData.length === 0) {
+      // Check if we have the required columns after mapping
+      const hasRequiredFields = mappedData.some(row => row.roll_no && row.name);
+      
+      if (!hasRequiredFields) {
         toast({
-          title: 'Invalid data',
-          description: 'Excel file must have columns: "roll_no" and "name"',
+          title: 'Data format issue',
+          description: 'The Excel file must contain columns that can be mapped to "roll_no" and "name". Common variations like "Roll No", "Student ID", "Full Name", etc. are accepted.',
           variant: 'destructive'
         });
         setFile(null);
@@ -48,7 +106,7 @@ export function useInternshipExcelImport({ facultyCoordinator, onClose }: { facu
       }
       
       // Only show first 5 rows for preview
-      setPreviewData(validData.slice(0, 5));
+      setPreviewData(mappedData.slice(0, 5));
     } catch (error) {
       console.error('Error previewing Excel:', error);
       toast({
@@ -95,13 +153,16 @@ export function useInternshipExcelImport({ facultyCoordinator, onClose }: { facu
         throw new Error('No data found in the Excel file.');
       }
       
+      // Map the data using our flexible column mappings
+      const mappedData = jsonData.map(mapRowData);
+      
       // Filter out rows without required fields
-      const filteredData = jsonData.filter((row: any) => {
+      const filteredData = mappedData.filter((row) => {
         return row.roll_no && row.name;
       });
       
       if (filteredData.length === 0) {
-        throw new Error('No valid data found. Each row must have at least roll_no and name.');
+        throw new Error('No valid data found. Each row must have information that can be mapped to roll number and name.');
       }
       
       // Process the data

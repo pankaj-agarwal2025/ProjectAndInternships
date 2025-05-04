@@ -394,48 +394,58 @@ export const addInternshipDynamicColumnValue = async (columnId: string, internsh
   }
 };
 
-// File upload utility
-export const uploadFile = async (file: File, bucketName: string, filePath: string) => {
+// Function to create a storage bucket if it doesn't exist
+export const ensureStorageBucket = async (bucketName: string) => {
   try {
-    console.log(`Uploading file to ${bucketName}/${filePath}`);
+    // Check if the bucket exists
+    const { data: buckets } = await supabase.storage.listBuckets();
+    const bucketExists = buckets?.some(bucket => bucket.name === bucketName);
     
-    // Check if the bucket exists first
-    const { data: buckets, error: bucketError } = await supabase.storage.listBuckets();
-    
-    if (bucketError) {
-      console.error('Error checking buckets:', bucketError);
-      throw bucketError;
-    }
-    
-    const bucketExists = buckets.some(b => b.name === bucketName);
     if (!bucketExists) {
-      console.error(`Bucket '${bucketName}' does not exist`);
-      throw new Error(`Storage bucket '${bucketName}' does not exist`);
+      // Create the bucket
+      const { data, error } = await supabase.storage.createBucket(bucketName, {
+        public: true
+      });
+      
+      if (error) {
+        console.error('Error creating bucket:', error);
+        return false;
+      }
     }
     
-    // Upload file
+    return true;
+  } catch (error) {
+    console.error('Error ensuring storage bucket exists:', error);
+    return false;
+  }
+};
+
+// Enhanced file upload function with bucket creation check
+export const uploadFile = async (file: File, bucketName: string, filePath: string): Promise<string | null> => {
+  try {
+    // Ensure the bucket exists
+    await ensureStorageBucket(bucketName);
+    
+    // Upload the file
     const { data, error } = await supabase.storage
       .from(bucketName)
       .upload(filePath, file, {
-        cacheControl: '3600',
         upsert: true,
       });
-
+    
     if (error) {
-      console.error('Error uploading file:', error);
       throw error;
     }
-
-    // Get the public URL for the uploaded file
-    const { data: publicUrl } = supabase.storage
+    
+    // Get the public URL for the file
+    const { data: { publicUrl } } = supabase.storage
       .from(bucketName)
-      .getPublicUrl(data.path);
-
-    console.log('File uploaded successfully, public URL:', publicUrl.publicUrl);
-    return publicUrl.publicUrl;
+      .getPublicUrl(filePath);
+    
+    return publicUrl;
   } catch (error) {
-    console.error('Error in uploadFile:', error);
-    throw error as Error;
+    console.error('Error uploading file:', error);
+    return null;
   }
 };
 

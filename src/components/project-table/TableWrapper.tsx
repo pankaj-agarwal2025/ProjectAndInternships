@@ -1,11 +1,14 @@
 
 import React, { useRef, useEffect } from 'react';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+} from "@/components/ui/table";
 
 interface TableWrapperProps {
   headerContent: React.ReactNode;
   bodyContent: React.ReactNode;
-  className?: string;
   showPagination?: boolean;
   totalItems?: number;
   itemsPerPage?: number;
@@ -13,139 +16,82 @@ interface TableWrapperProps {
   onPageChange?: (page: number) => void;
 }
 
-/**
- * TableWrapper component that synchronizes horizontal scrolling between header and body
- */
 const TableWrapper: React.FC<TableWrapperProps> = ({
   headerContent,
   bodyContent,
-  className,
-  showPagination = true,
+  showPagination = false,
   totalItems = 0,
   itemsPerPage = 10,
   currentPage = 1,
-  onPageChange
+  onPageChange = () => {},
 }) => {
-  const headerRef = useRef<HTMLDivElement>(null);
-  const bodyRef = useRef<HTMLDivElement>(null);
-  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const headerContainerRef = useRef<HTMLDivElement>(null);
   
-  // Synchronize horizontal scrolling between header and body
+  // Synchronize header and content scrolling
   useEffect(() => {
-    const headerElement = headerRef.current;
-    const bodyElement = bodyRef.current;
+    const tableContainer = tableContainerRef.current;
+    const headerContainer = headerContainerRef.current;
     
-    if (!headerElement || !bodyElement) return;
+    if (!tableContainer || !headerContainer) return;
     
-    const handleHeaderScroll = () => {
-      if (bodyElement) {
-        bodyElement.scrollLeft = headerElement.scrollLeft;
-      }
+    const handleScroll = () => {
+      headerContainer.scrollLeft = tableContainer.scrollLeft;
     };
     
-    const handleBodyScroll = () => {
-      if (headerElement) {
-        headerElement.scrollLeft = bodyElement.scrollLeft;
-      }
-    };
-    
-    headerElement.addEventListener('scroll', handleHeaderScroll);
-    bodyElement.addEventListener('scroll', handleBodyScroll);
+    tableContainer.addEventListener('scroll', handleScroll);
     
     return () => {
-      headerElement.removeEventListener('scroll', handleHeaderScroll);
-      bodyElement.removeEventListener('scroll', handleBodyScroll);
+      tableContainer.removeEventListener('scroll', handleScroll);
     };
   }, []);
   
   return (
-    <div className={`flex flex-col ${className || ''}`}>
-      {/* Table header with horizontal scroll */}
+    <div className="flex flex-col">
       <div 
-        ref={headerRef}
-        className="overflow-x-auto"
-        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        className="overflow-hidden"
+        ref={headerContainerRef}
       >
-        {headerContent}
+        <Table>
+          <TableHeader>
+            {headerContent}
+          </TableHeader>
+        </Table>
       </div>
       
-      {/* Table body with horizontal scroll */}
       <div 
-        ref={bodyRef}
-        className="overflow-x-auto max-h-[calc(100vh-350px)] overflow-y-auto"
+        className="overflow-auto max-h-[70vh]" 
+        ref={tableContainerRef}
       >
-        {bodyContent}
+        <Table>
+          <TableBody>
+            {bodyContent}
+          </TableBody>
+        </Table>
       </div>
       
-      {/* Pagination */}
       {showPagination && totalItems > 0 && (
-        <div className="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6">
-          <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm text-gray-700">
-                Showing <span className="font-medium">{((currentPage - 1) * itemsPerPage) + 1}</span> to{' '}
-                <span className="font-medium">
-                  {Math.min(currentPage * itemsPerPage, totalItems)}
-                </span>{' '}
-                of <span className="font-medium">{totalItems}</span> results
-              </p>
-            </div>
-            <div>
-              <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
-                <button
-                  onClick={() => onPageChange?.(currentPage - 1)}
-                  disabled={currentPage <= 1}
-                  className="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Previous
-                </button>
-                
-                {Array.from({ length: Math.min(totalPages, 5) }).map((_, index) => {
-                  let pageNumber: number;
-                  
-                  if (totalPages <= 5) {
-                    // Show all pages if 5 or fewer
-                    pageNumber = index + 1;
-                  } else if (currentPage <= 3) {
-                    // Near the start
-                    pageNumber = index + 1;
-                    if (index === 4) pageNumber = totalPages;
-                  } else if (currentPage >= totalPages - 2) {
-                    // Near the end
-                    if (index === 0) pageNumber = 1;
-                    else pageNumber = totalPages - (4 - index);
-                  } else {
-                    // In the middle
-                    pageNumber = currentPage - 2 + index;
-                    if (index === 0) pageNumber = 1;
-                    if (index === 4) pageNumber = totalPages;
-                  }
-                  
-                  return (
-                    <button
-                      key={index}
-                      onClick={() => onPageChange?.(pageNumber)}
-                      className={`relative inline-flex items-center px-4 py-2 text-sm font-semibold ${
-                        pageNumber === currentPage
-                          ? 'bg-primary text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600'
-                          : 'text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:outline-offset-0'
-                      }`}
-                    >
-                      {pageNumber}
-                    </button>
-                  );
-                })}
-                
-                <button
-                  onClick={() => onPageChange?.(currentPage + 1)}
-                  disabled={currentPage >= totalPages}
-                  className="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Next
-                </button>
-              </nav>
-            </div>
-          </div>
+        <div className="flex justify-end mt-4 space-x-2">
+          <button
+            className="px-4 py-2 bg-gray-100 rounded disabled:opacity-50"
+            onClick={() => onPageChange(currentPage - 1)}
+            disabled={currentPage <= 1}
+          >
+            Previous
+          </button>
+          <span className="px-4 py-2 bg-primary text-white rounded">{currentPage}</span>
+          {currentPage < Math.ceil(totalItems / itemsPerPage) && (
+            <span className="px-4 py-2 bg-gray-100 rounded cursor-pointer" onClick={() => onPageChange(currentPage + 1)}>
+              {currentPage + 1}
+            </span>
+          )}
+          <button
+            className="px-4 py-2 bg-gray-100 rounded disabled:opacity-50"
+            onClick={() => onPageChange(currentPage + 1)}
+            disabled={currentPage >= Math.ceil(totalItems / itemsPerPage)}
+          >
+            Next
+          </button>
         </div>
       )}
     </div>

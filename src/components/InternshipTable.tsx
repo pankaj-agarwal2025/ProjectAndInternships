@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -249,8 +248,12 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
   const handleFileUpload = async (file: File, fieldName: string, internshipId: string) => {
     setIsUploading(true);
     try {
+      // Specify the bucket name based on the file type
+      const bucketName = 'internship_files';
+      
+      // Create a unique path for the file
       const fileName = `${internshipId}/${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
-      const fileUrl = await uploadFile(file, 'internship_files', fileName);
+      const fileUrl = await uploadFile(file, bucketName, fileName);
       
       if (!fileUrl) {
         throw new Error('Failed to get file URL after upload');
@@ -637,6 +640,23 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
     </Dialog>
   );
 
+  // Render document cells with improved UI
+  const renderDocumentCell = (url: string | null, label: string) => {
+    if (!url) return <span className="text-gray-400">—</span>;
+    
+    return (
+      <a 
+        href={url} 
+        target="_blank" 
+        rel="noopener noreferrer"
+        className="flex items-center text-primary hover:text-primary/80"
+      >
+        <FileText className="h-4 w-4 mr-1" />
+        View {label}
+      </a>
+    );
+  };
+
   // Table rendering
   return (
     <div>
@@ -802,7 +822,7 @@ const InternshipTable: React.FC<InternshipTableProps> = ({ filters }) => {
                           type="file"
                           id={`offer-letter-${internship.id}`}
                           className="hidden"
-                          accept="application/pdf"
+                          accept="application/pdf,image/*"
                           onChange={(e) => handleFileChange(e, 'offer_letter_url', internship.id)}
                         />
                         {internship.offer_letter_url && (
