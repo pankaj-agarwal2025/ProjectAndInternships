@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Project } from '@/lib/supabase';
+import { Project, Student } from '@/lib/supabase';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Edit, Save, Users } from 'lucide-react';

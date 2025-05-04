@@ -60,19 +60,19 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
   setIsOpen,
   project,
   evaluationType,
-  editedProject: parentEditedProject,
-  setEditedProject: parentSetEditedProject,
-  isSaving: parentIsSaving,
-  setIsSaving: parentSetIsSaving,
+  editedProject,
+  setEditedProject,
+  isSaving,
+  setIsSaving,
   fetchProjects,
 }) => {
   const [localEditedProject, setLocalEditedProject] = useState<Partial<Project>>({});
-  const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
 
+  // Update local state when project changes or modal opens
   useEffect(() => {
-    if (project) {
-      setLocalEditedProject(project);
+    if (project && isOpen) {
+      setLocalEditedProject({ ...project });
     }
   }, [project, isOpen]);
 
@@ -107,11 +107,12 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
     setIsSaving(true);
     try {
       const totalValue = calculateTotal();
-      const updatedProject: Record<string, any> = {
+      
+      // Create update object with only the fields we want to update
+      const updatedProject: Record<string, any> = { 
         ...Object.fromEntries(
-          Object.entries(localEditedProject).filter(([key, value]) => 
-            fields?.some(field => field.id === key) && value !== undefined
-          )
+          Object.entries(localEditedProject)
+            .filter(([key]) => fields?.some(field => field.id === key))
         ),
         [totalField]: totalValue
       };
@@ -132,7 +133,13 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
         description: 'Evaluation saved successfully!',
       });
       
-      fetchProjects();
+      // Update parent component's state
+      setEditedProject(prev => ({
+        ...prev,
+        ...updatedProject
+      }));
+      
+      await fetchProjects();
       setIsOpen(false);
     } catch (error) {
       console.error('Error saving evaluation:', error);

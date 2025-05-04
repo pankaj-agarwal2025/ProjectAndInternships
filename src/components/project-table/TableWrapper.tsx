@@ -26,44 +26,20 @@ const TableWrapper: React.FC<TableWrapperProps> = ({
   onPageChange = () => {},
 }) => {
   const tableContainerRef = useRef<HTMLDivElement>(null);
-  const headerContainerRef = useRef<HTMLDivElement>(null);
   
-  // Synchronize header and content scrolling
-  useEffect(() => {
-    const tableContainer = tableContainerRef.current;
-    const headerContainer = headerContainerRef.current;
-    
-    if (!tableContainer || !headerContainer) return;
-    
-    const handleScroll = () => {
-      headerContainer.scrollLeft = tableContainer.scrollLeft;
-    };
-    
-    tableContainer.addEventListener('scroll', handleScroll);
-    
-    return () => {
-      tableContainer.removeEventListener('scroll', handleScroll);
-    };
-  }, []);
+  // We don't need separate refs for header and content anymore as we're using a single scrollable container
   
   return (
     <div className="flex flex-col">
-      <div 
-        className="overflow-hidden"
-        ref={headerContainerRef}
-      >
-        <Table>
-          <TableHeader>
-            {headerContent}
-          </TableHeader>
-        </Table>
-      </div>
-      
+      {/* Using a single container for both header and body with overflow property */}
       <div 
         className="overflow-auto max-h-[70vh]" 
         ref={tableContainerRef}
       >
         <Table>
+          <TableHeader>
+            {headerContent}
+          </TableHeader>
           <TableBody>
             {bodyContent}
           </TableBody>
