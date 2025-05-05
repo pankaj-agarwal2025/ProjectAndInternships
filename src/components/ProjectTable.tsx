@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -29,6 +28,7 @@ import {
   Link as LinkIcon,
   ExternalLink,
   Users,
+  Info,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import {
@@ -58,7 +58,13 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-} from "@/components/ui/dialog"
+} from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { 
   addDynamicColumn, 
   getDynamicColumns, 
@@ -71,6 +77,12 @@ import { Project, Student } from '@/lib/supabase';
 
 interface ProjectTableProps {
   filters: Record<string, any>;
+}
+
+interface EvaluationField {
+  id: string;
+  name: string;
+  maxMarks: number;
 }
 
 const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
@@ -98,6 +110,9 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
   const [editLinkURL, setEditLinkURL] = useState('');
   const [editLinkColumnId, setEditLinkColumnId] = useState('');
   const [editLinkProjectId, setEditLinkProjectId] = useState('');
+  const [showEvaluationModal, setShowEvaluationModal] = useState(false);
+  const [currentEvaluationProject, setCurrentEvaluationProject] = useState<Project | null>(null);
+  const [evaluationType, setEvaluationType] = useState<'initial' | 'progress' | 'final'>('initial');
   const { toast } = useToast();
 
   // Added three new evaluation columns
@@ -105,6 +120,31 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
     { id: 'initial_evaluation', name: 'Initial Evaluation' },
     { id: 'progress_evaluation', name: 'Progress Evaluation' },
     { id: 'final_evaluation', name: 'Final Evaluation' }
+  ];
+
+  // Initial evaluation fields
+  const initialEvaluationFields: EvaluationField[] = [
+    { id: 'initial_clarity_objectives', name: 'Clarity of Objectives', maxMarks: 5 },
+    { id: 'initial_background_feasibility', name: 'Background & Feasibility Study', maxMarks: 5 },
+    { id: 'initial_usability_applications', name: 'Usability/Applications', maxMarks: 5 },
+    { id: 'initial_innovation_novelty', name: 'Innovation/Novelty', maxMarks: 5 },
+  ];
+  
+  // Progress evaluation fields
+  const progressEvaluationFields: EvaluationField[] = [
+    { id: 'progress_data_extraction', name: 'Data Extraction & Processing', maxMarks: 5 },
+    { id: 'progress_methodology', name: 'Methodology', maxMarks: 5 },
+    { id: 'progress_implementation', name: 'Implementation', maxMarks: 15 },
+    { id: 'progress_code_optimization', name: 'Code Optimization', maxMarks: 10 },
+    { id: 'progress_user_interface', name: 'User Interface', maxMarks: 5 },
+  ];
+  
+  // Final evaluation fields
+  const finalEvaluationFields: EvaluationField[] = [
+    { id: 'final_implementation', name: 'Implementation', maxMarks: 10 },
+    { id: 'final_results', name: 'Results', maxMarks: 10 },
+    { id: 'final_research_paper', name: 'Research Paper & Report', maxMarks: 10 },
+    { id: 'final_project_completion', name: 'Project Completion and Validation', maxMarks: 10 },
   ];
 
   useEffect(() => {
@@ -140,6 +180,10 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
       
       if (filters.faculty_coordinator) {
         query = query.like('faculty_coordinator', `%${filters.faculty_coordinator}%`);
+      }
+      
+      if (filters.project_category) {
+        query = query.eq('project_category', filters.project_category);
       }
       
       if (filters.searchTerm) {
@@ -429,7 +473,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
     }
     
     try {
-      await addDynamicColumn(newColumnName, newColumnType);
+      await addDynamicColumn(newColumnName, newColumnType || 'text');
       fetchDynamicColumns();
       setShowAddColumnModal(false);
       setNewColumnName('');
@@ -573,11 +617,16 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
   };
 
   const generatePdf = () => {
-    const doc = new jsPDF();
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: 'a4'
+    });
     
     // Add title
     doc.setFontSize(16);
-    doc.text("Project Portal Report", 14, 10);
+    const pageWidth = doc.internal.pageSize.getWidth();
+    doc.text("Project Portal Report", pageWidth / 2, 10, { align: 'center' });
     
     // Add filter information at the top
     let filterText = 'Filter Information:\n';
@@ -622,6 +671,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
     
     // Create data rows
     const rows = projects.map(project => {
+      // Create simple text-only rows for PDF export
       const standardData = [
         project.group_no || '',
         project.title || '',
@@ -655,10 +705,39 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
       startY: 40,
       head: [allColumns],
       body: rows,
+      headStyles: {
+        fillColor: [41, 128, 185],
+        textColor: [255, 255, 255],
+        halign: 'center',
+        valign: 'middle',
+        fontSize: 10,
+        cellPadding: 3,
+      },
+      bodyStyles: {
+        fontSize: 9,
+        cellPadding: 3,
+      },
+      margin: { top: 20, right: 15, bottom: 15, left: 15 },
+      styles: {
+        overflow: 'linebreak',
+        cellWidth: 'wrap',
+        font: 'helvetica',
+      },
+      columnStyles: {
+        1: { cellWidth: 'auto' }, // Title column
+      },
       didDrawPage: (data) => {
         // Header on each page
         doc.setFontSize(10);
         doc.text("Project Portal Report - " + new Date().toLocaleDateString(), data.settings.margin.left, 10);
+        
+        // Footer with page number
+        const pageCount = doc.getNumberOfPages();
+        doc.setFontSize(8);
+        for(let i = 1; i <= pageCount; i++) {
+          doc.setPage(i);
+          doc.text(`Page ${i} of ${pageCount}`, doc.internal.pageSize.getWidth() / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' });
+        }
       }
     });
     
@@ -880,6 +959,172 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
     );
   };
 
+  // Render evaluation marks display with tooltip
+  const renderEvaluationMarks = (project: Project, type: 'initial' | 'progress' | 'final') => {
+    const totalField = `${type}_total`;
+    const totalValue = project[totalField as keyof Project];
+    
+    let maxTotal = 0;
+    let fields: EvaluationField[] = [];
+    
+    switch(type) {
+      case 'initial':
+        fields = initialEvaluationFields;
+        maxTotal = 20;
+        break;
+      case 'progress':
+        fields = progressEvaluationFields;
+        maxTotal = 40;
+        break;
+      case 'final':
+        fields = finalEvaluationFields;
+        maxTotal = 40;
+        break;
+    }
+    
+    // Prepare tooltip content showing individual marks
+    const tooltipContent = (
+      <div className="p-2">
+        <h4 className="font-bold mb-2">{type.charAt(0).toUpperCase() + type.slice(1)} Evaluation</h4>
+        <ul className="space-y-1">
+          {fields.map(field => (
+            <li key={field.id} className="flex justify-between">
+              <span>{field.name}</span>
+              <span>{project[field.id as keyof Project] || 0}/{field.maxMarks}</span>
+            </li>
+          ))}
+          <li className="font-bold border-t pt-1 mt-1">
+            <span>Total</span>
+            <span>{totalValue || 0}/{maxTotal}</span>
+          </li>
+        </ul>
+      </div>
+    );
+
+    if (editRowId === project.id) {
+      return (
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={() => handleShowEvaluation(project, type)}
+        >
+          <Edit className="h-3 w-3 mr-1" />
+          Edit {(totalValue || 0)}/{maxTotal}
+        </Button>
+      );
+    }
+    
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => handleShowEvaluation(project, type)}
+            >
+              {totalValue || 0}/{maxTotal} <Info className="h-3 w-3 ml-1" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right" className="w-64">
+            {tooltipContent}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
+  
+  // Render project category field
+  const renderProjectCategory = (project: Project) => {
+    if (editRowId === project.id) {
+      return (
+        <Select
+          defaultValue={project.project_category || ''}
+          onValueChange={(value) => setEditedProject(prev => ({ ...prev, project_category: value }))}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Select category" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Industry Based">Industry Based</SelectItem>
+            <SelectItem value="Research Based">Research Based</SelectItem>
+          </SelectContent>
+        </Select>
+      );
+    }
+    
+    return project.project_category || '—';
+  };
+
+  const handleShowEvaluation = (project: Project, type: 'initial' | 'progress' | 'final') => {
+    setCurrentEvaluationProject(project);
+    setEvaluationType(type);
+    setShowEvaluationModal(true);
+  };
+
+  const handleSaveEvaluation = async () => {
+    if (!currentEvaluationProject) return;
+    
+    setIsSaving(true);
+    try {
+      // Create a copy of editedProject without the students array to avoid type errors
+      const projectToUpdate = { ...editedProject };
+      if ('students' in projectToUpdate) {
+        delete projectToUpdate.students;
+      }
+      
+      await supabase
+        .from('projects')
+        .update(projectToUpdate)
+        .eq('id', currentEvaluationProject.id);
+      
+      fetchProjects();
+      setShowEvaluationModal(false);
+      setCurrentEvaluationProject(null);
+      setEditedProject({});
+      
+      toast({
+        title: 'Success',
+        description: `${evaluationType.charAt(0).toUpperCase() + evaluationType.slice(1)} evaluation updated successfully!`,
+      });
+    } catch (error) {
+      console.error('Error updating evaluation:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update evaluation. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const renderCellContent = (value: any): React.ReactNode => {
+    if (value === null || value === undefined) {
+      return '';
+    }
+    
+    if (Array.isArray(value)) {
+      if (value.length === 0) return 'None';
+      
+      // For Student arrays, render as a list of names
+      if (typeof value[0] === 'object' && 'name' in value[0]) {
+        return (
+          <ul className="list-disc list-inside">
+            {value.map((student, idx) => (
+              <li key={idx}>{student.name}</li>
+            ))}
+          </ul>
+        );
+      }
+      
+      // For other arrays
+      return value.join(', ');
+    }
+    
+    return String(value);
+  };
+
   return (
     <div>
       <div className="flex justify-between items-center mb-4">
@@ -918,6 +1163,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
               <TableHead className="w-[50px]">Select</TableHead>
               <TableHead>Group No</TableHead>
               <TableHead>Title</TableHead>
+              <TableHead>Project Category</TableHead>
               <TableHead>Domain</TableHead>
               <TableHead>Faculty Mentor</TableHead>
               <TableHead>Industry Mentor</TableHead>
@@ -951,7 +1197,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
           <TableBody>
             {projects.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={18 + dynamicColumns.length} className="text-center py-8">
+                <TableCell colSpan={19 + dynamicColumns.length} className="text-center py-8">
                   No projects found. Try adjusting your filters or adding new projects.
                 </TableCell>
               </TableRow>
@@ -965,6 +1211,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
                       onChange={() => handleSelectProject(project.id)}
                     />
                   </TableCell>
+                  
                   <TableCell>
                     {editRowId === project.id ? (
                       <Input
@@ -988,6 +1235,9 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
                     ) : (
                       project.title
                     )}
+                  </TableCell>
+                  <TableCell>
+                    {renderProjectCategory(project)}
                   </TableCell>
                   <TableCell>
                     {editRowId === project.id ? (
@@ -1086,46 +1336,22 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
                     {renderPdfField(project.id, 'report_url', project.report_url, 'Report')}
                   </TableCell>
                   <TableCell>
-                    {editRowId === project.id ? (
-                      <Input
-                        type="text"
-                        name="initial_evaluation"
-                        id={`initial_evaluation-${project.id}`}
-                        defaultValue={project.initial_evaluation || ''}
-                      />
-                    ) : (
-                      project.initial_evaluation || 'Not evaluated'
-                    )}
+                    {renderEvaluationMarks(project, 'initial')}
                   </TableCell>
                   <TableCell>
-                    {editRowId === project.id ? (
-                      <Input
-                        type="text"
-                        name="progress_evaluation"
-                        id={`progress_evaluation-${project.id}`}
-                        defaultValue={project.progress_evaluation || ''}
-                      />
-                    ) : (
-                      project.progress_evaluation || 'Not evaluated'
-                    )}
+                    {renderEvaluationMarks(project, 'progress')}
                   </TableCell>
                   <TableCell>
-                    {editRowId === project.id ? (
-                      <Input
-                        type="text"
-                        name="final_evaluation"
-                        id={`final_evaluation-${project.id}`}
-                        defaultValue={project.final_evaluation || ''}
-                      />
-                    ) : (
-                      project.final_evaluation || 'Not evaluated'
-                    )}
+                    {renderEvaluationMarks(project, 'final')}
                   </TableCell>
+                  
+                  {/* Dynamic columns */}
                   {dynamicColumns.map((column) => (
                     <TableCell key={`${project.id}-${column.id}`}>
                       {renderDynamicColumnField(project.id, column)}
                     </TableCell>
                   ))}
+                  
                   <TableCell className="text-right">
                     {editRowId === project.id ? (
                       <div className="flex justify-end gap-2">
@@ -1264,7 +1490,7 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
               <label htmlFor="column_type" className="text-right">
                 Column Type
               </label>
-              <Select onValueChange={(value) => setNewColumnType(value)}>
+              <Select value={newColumnType || 'text'} onValueChange={(value) => setNewColumnType(value)}>
                 <SelectTrigger className="col-span-3">
                   <SelectValue placeholder="Select a type" />
                 </SelectTrigger>
@@ -1342,6 +1568,126 @@ const ProjectTable: React.FC<ProjectTableProps> = ({ filters }) => {
             </Button>
             <Button type="button" variant="ghost" onClick={() => setIsLinkEditable(false)}>
               Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showEvaluationModal} onOpenChange={setShowEvaluationModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {evaluationType.charAt(0).toUpperCase() + evaluationType.slice(1)} Evaluation
+            </DialogTitle>
+            <DialogDescription>
+              Enter marks for each category (Project: {currentEvaluationProject?.title})
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {evaluationType === 'initial' && (
+              <>
+                {initialEvaluationFields.map(field => (
+                  <div key={field.id} className="grid grid-cols-2 items-center gap-4">
+                    <label htmlFor={field.id} className="text-right font-medium text-sm">
+                      {field.name} ({field.maxMarks})
+                    </label>
+                    <Input
+                      id={field.id}
+                      type="number"
+                      min="0"
+                      max={field.maxMarks}
+                      value={editedProject[field.id as keyof typeof editedProject] || ''}
+                      onChange={(e) => {
+                        const value = e.target.value === '' ? null : parseFloat(e.target.value);
+                        setEditedProject(prev => ({ ...prev, [field.id]: value }));
+                      }}
+                    />
+                  </div>
+                ))}
+              </>
+            )}
+            
+            {evaluationType === 'progress' && (
+              <>
+                {progressEvaluationFields.map(field => (
+                  <div key={field.id} className="grid grid-cols-2 items-center gap-4">
+                    <label htmlFor={field.id} className="text-right font-medium text-sm">
+                      {field.name} ({field.maxMarks})
+                    </label>
+                    <Input
+                      id={field.id}
+                      type="number"
+                      min="0"
+                      max={field.maxMarks}
+                      value={editedProject[field.id as keyof typeof editedProject] || ''}
+                      onChange={(e) => {
+                        const value = e.target.value === '' ? null : parseFloat(e.target.value);
+                        setEditedProject(prev => ({ ...prev, [field.id]: value }));
+                      }}
+                    />
+                  </div>
+                ))}
+              </>
+            )}
+            
+            {evaluationType === 'final' && (
+              <>
+                {finalEvaluationFields.map(field => (
+                  <div key={field.id} className="grid grid-cols-2 items-center gap-4">
+                    <label htmlFor={field.id} className="text-right font-medium text-sm">
+                      {field.name} ({field.maxMarks})
+                    </label>
+                    <Input
+                      id={field.id}
+                      type="number"
+                      min="0"
+                      max={field.maxMarks}
+                      value={editedProject[field.id as keyof typeof editedProject] || ''}
+                      onChange={(e) => {
+                        const value = e.target.value === '' ? null : parseFloat(e.target.value);
+                        setEditedProject(prev => ({ ...prev, [field.id]: value }));
+                      }}
+                    />
+                  </div>
+                ))}
+              </>
+            )}
+            
+            <div className="grid grid-cols-2 items-center gap-4 pt-2 border-t">
+              <span className="text-right font-bold">
+                Total
+              </span>
+              <span className="font-bold">
+                {evaluationType === 'initial' && 
+                  (initialEvaluationFields.reduce(
+                    (sum, field) => sum + (parseFloat(String(editedProject[field.id as keyof typeof editedProject] || 0)) || 0), 
+                    0
+                  ))
+                }
+                {evaluationType === 'progress' && 
+                  (progressEvaluationFields.reduce(
+                    (sum, field) => sum + (parseFloat(String(editedProject[field.id as keyof typeof editedProject] || 0)) || 0), 
+                    0
+                  ))
+                }
+                {evaluationType === 'final' && 
+                  (finalEvaluationFields.reduce(
+                    (sum, field) => sum + (parseFloat(String(editedProject[field.id as keyof typeof editedProject] || 0)) || 0), 
+                    0
+                  ))
+                }
+                /{evaluationType === 'initial' ? 20 : 40}
+              </span>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEvaluationModal(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEvaluation} disabled={isSaving}>
+              {isSaving ? 'Saving...' : 'Save Evaluation'}
             </Button>
           </DialogFooter>
         </DialogContent>

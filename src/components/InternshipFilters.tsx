@@ -1,367 +1,288 @@
 
 import React, { useState, useEffect } from 'react';
-import { Filter, Calendar, X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
+import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Search, X } from 'lucide-react';
 import { getInternshipDynamicColumns } from '@/lib/supabase';
-
-// Programs and Faculty Coordinator options
-const programOptions = [
-  'BSc CS', 'BSc DS', 'BSc Cyber', 'BCA', 'BCA AI/DS', 
-  'BTech CSE', 'BTech FSD', 'BTech UI/UX', 'BTech AI/ML'
-];
-
-const facultyCoordinatorOptions = [
-  'Dr. Pankaj', 'Dr. Anshu', 'Dr. Meenu', 'Dr. Swati'
-];
-
-// Month options
-const monthOptions = [
-  { value: "01", label: "January" },
-  { value: "02", label: "February" },
-  { value: "03", label: "March" },
-  { value: "04", label: "April" },
-  { value: "05", label: "May" },
-  { value: "06", label: "June" },
-  { value: "07", label: "July" },
-  { value: "08", label: "August" },
-  { value: "09", label: "September" },
-  { value: "10", label: "October" },
-  { value: "11", label: "November" },
-  { value: "12", label: "December" }
-];
 
 interface InternshipFiltersProps {
   onFilterChange: (filters: Record<string, any>) => void;
 }
 
 const InternshipFilters: React.FC<InternshipFiltersProps> = ({ onFilterChange }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [filters, setFilters] = useState<Record<string, any>>({
-    roll_no: '',
-    name: '',
-    program: '',
-    domain: '',
-    faculty_coordinator: '',
-    organization_name: '',
-    year: '',
-    semester: '',
-    session: '',
-    starting_month: ''
-  });
-  const [dynamicColumns, setDynamicColumns] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [domain, setDomain] = useState('');
+  const [year, setYear] = useState('');
+  const [semester, setSemester] = useState('');
+  const [session, setSession] = useState('');
+  const [organization, setOrganization] = useState('');
+  const [program, setProgram] = useState('');
+  const [month, setMonth] = useState('');
+  const [facultyCoordinator, setFacultyCoordinator] = useState('');
   const [dynamicFilters, setDynamicFilters] = useState<Record<string, string>>({});
-  const [searchValue, setSearchValue] = useState('');
+  const [dynamicColumns, setDynamicColumns] = useState<any[]>([]);
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [availableMonths, setAvailableMonths] = useState<string[]>([]);
+  const [availableCoordinators, setAvailableCoordinators] = useState<string[]>([]);
 
   useEffect(() => {
     fetchDynamicColumns();
+    fetchAvailableMonths();
+    fetchAvailableCoordinators();
   }, []);
 
+  useEffect(() => {
+    const filters = {
+      searchTerm: searchTerm || '',
+      domain: domain || '',
+      year: year || '',
+      semester: semester || '',
+      session: session || '',
+      organization_name: organization || '',
+      program: program === 'all_programs' ? '' : program,
+      month: month === 'all_months' ? '' : month,
+      faculty_coordinator: facultyCoordinator === 'all_coordinators' ? '' : facultyCoordinator,
+      ...dynamicFilters,
+    };
+    onFilterChange(filters);
+  }, [searchTerm, domain, year, semester, session, organization, program, month, facultyCoordinator, dynamicFilters, onFilterChange]);
+
   const fetchDynamicColumns = async () => {
-    const columns = await getInternshipDynamicColumns();
-    setDynamicColumns(columns);
-
-    // Initialize dynamic filters
-    const initialDynamicFilters: Record<string, string> = {};
-    columns.forEach(column => {
-      initialDynamicFilters[column.id] = '';
-    });
-    setDynamicFilters(initialDynamicFilters);
-  };
-
-  const handleFilterChange = (field: string, value: string) => {
-    setFilters(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleSearchChange = (value: string) => {
-    setSearchValue(value);
-    // Apply the search filter immediately
-    const newFilters = { ...filters, searchTerm: value };
-    if (!value) {
-      delete newFilters.searchTerm;
+    try {
+      const columns = await getInternshipDynamicColumns();
+      setDynamicColumns(columns);
+    } catch (error) {
+      console.error('Error fetching dynamic columns:', error);
     }
-    setFilters(newFilters);
-    onFilterChange(newFilters);
+  };
+
+  const fetchAvailableMonths = async () => {
+    try {
+      const { data } = await supabase
+        .from('internships')
+        .select('starting_date');
+      
+      if (data) {
+        const months = data
+          .filter(item => item.starting_date)
+          .map(item => {
+            const date = new Date(item.starting_date);
+            return date.toLocaleString('default', { month: 'long' });
+          });
+        
+        setAvailableMonths([...new Set(months)]);
+      }
+    } catch (error) {
+      console.error('Error fetching available months:', error);
+    }
+  };
+
+  const fetchAvailableCoordinators = async () => {
+    try {
+      const { data } = await supabase
+        .from('internships')
+        .select('faculty_coordinator')
+        .not('faculty_coordinator', 'is', null);
+      
+      if (data) {
+        const coordinators = data
+          .map(item => item.faculty_coordinator)
+          .filter(Boolean);
+        
+        setAvailableCoordinators([...new Set(coordinators)]);
+      }
+    } catch (error) {
+      console.error('Error fetching available coordinators:', error);
+    }
   };
 
   const handleDynamicFilterChange = (columnId: string, value: string) => {
-    setDynamicFilters(prev => ({ ...prev, [columnId]: value }));
+    setDynamicFilters((prev) => ({
+      ...prev,
+      [columnId]: value,
+    }));
   };
 
-  const applyFilters = () => {
-    // Combine regular filters and dynamic filters
-    const combinedFilters = { ...filters };
-    
-    // Add dynamic filters
-    Object.entries(dynamicFilters).forEach(([key, value]) => {
-      if (value) {
-        combinedFilters[`dynamic_${key}`] = value;
-      }
-    });
-    
-    // Remove empty filters
-    Object.keys(combinedFilters).forEach(key => {
-      if (!combinedFilters[key]) {
-        delete combinedFilters[key];
-      }
-    });
-    
-    onFilterChange(combinedFilters);
-  };
-
-  const resetFilters = () => {
-    // Reset regular filters
-    const resetRegularFilters: Record<string, string> = {};
-    Object.keys(filters).forEach(key => {
-      resetRegularFilters[key] = '';
-    });
-    
-    // Reset dynamic filters
-    const resetDynamicFilters: Record<string, string> = {};
-    dynamicColumns.forEach(column => {
-      resetDynamicFilters[column.id] = '';
-    });
-    
-    setFilters(resetRegularFilters);
-    setDynamicFilters(resetDynamicFilters);
-    setSearchValue('');
-    onFilterChange({});
+  const handleClearFilters = () => {
+    setSearchTerm('');
+    setDomain('');
+    setYear('');
+    setSemester('');
+    setSession('');
+    setOrganization('');
+    setProgram('');
+    setMonth('');
+    setFacultyCoordinator('');
+    setDynamicFilters({});
   };
 
   return (
-    <Card className="mb-6">
-      <CardContent className="pt-6">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-medium flex items-center">
-            <Filter className="mr-2 h-5 w-5" />
-            Filters
-          </h3>
-          <Button 
-            variant="ghost" 
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="text-sm"
+    <Card>
+      <div className="p-4 space-y-4">
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="relative flex-grow">
+            <Input
+              type="text"
+              placeholder="Search by name, roll no, organization..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+          </div>
+          
+          <Button
+            variant="outline"
+            onClick={() => setIsFiltersOpen(!isFiltersOpen)}
+            className="whitespace-nowrap"
           >
-            {isExpanded ? 'Collapse' : 'Expand'}
+            {isFiltersOpen ? 'Hide Filters' : 'Show Filters'}
           </Button>
+          
+          {(searchTerm || domain || year || semester || session || organization || program || month || facultyCoordinator || Object.keys(dynamicFilters).length > 0) && (
+            <Button
+              variant="ghost"
+              onClick={handleClearFilters}
+              className="whitespace-nowrap"
+            >
+              <X className="h-4 w-4 mr-2" />
+              Clear Filters
+            </Button>
+          )}
         </div>
         
-        {isExpanded ? (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="rollNo">Roll No</Label>
-                <Input
-                  id="rollNo"
-                  placeholder="Filter by roll number"
-                  value={filters.roll_no}
-                  onChange={(e) => handleFilterChange('roll_no', e.target.value)}
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="name">Name</Label>
-                <Input
-                  id="name"
-                  placeholder="Filter by name"
-                  value={filters.name}
-                  onChange={(e) => handleFilterChange('name', e.target.value)}
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="program">Program</Label>
-                <Select 
-                  value={filters.program} 
-                  onValueChange={(value) => handleFilterChange('program', value)}
-                >
-                  <SelectTrigger id="program">
-                    <SelectValue placeholder="Select program" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all_programs">All Programs</SelectItem>
-                    {programOptions.map(option => (
-                      <SelectItem key={option} value={option}>{option}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="domain">Domain</Label>
-                <Input
-                  id="domain"
-                  placeholder="Filter by domain"
-                  value={filters.domain}
-                  onChange={(e) => handleFilterChange('domain', e.target.value)}
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="facultyCoordinator">Faculty Coordinator</Label>
-                <Select 
-                  value={filters.faculty_coordinator} 
-                  onValueChange={(value) => handleFilterChange('faculty_coordinator', value)}
-                >
-                  <SelectTrigger id="facultyCoordinator">
-                    <SelectValue placeholder="Select faculty coordinator" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all_coordinators">All Coordinators</SelectItem>
-                    {facultyCoordinatorOptions.map(option => (
-                      <SelectItem key={option} value={option}>{option}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="organization">Organization</Label>
-                <Input
-                  id="organization"
-                  placeholder="Filter by organization"
-                  value={filters.organization_name}
-                  onChange={(e) => handleFilterChange('organization_name', e.target.value)}
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="year">Year</Label>
-                <Input
-                  id="year"
-                  placeholder="Filter by year"
-                  value={filters.year}
-                  onChange={(e) => handleFilterChange('year', e.target.value)}
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="semester">Semester</Label>
-                <Input
-                  id="semester"
-                  placeholder="Filter by semester"
-                  value={filters.semester}
-                  onChange={(e) => handleFilterChange('semester', e.target.value)}
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="session">Session</Label>
-                <Input
-                  id="session"
-                  placeholder="Filter by session"
-                  value={filters.session}
-                  onChange={(e) => handleFilterChange('session', e.target.value)}
-                />
-              </div>
-              
-              {/* Month filter for starting date */}
-              <div className="space-y-2">
-                <Label htmlFor="starting-month" className="flex items-center">
-                  <Calendar className="h-4 w-4 mr-1" />
-                  Starting Month
-                </Label>
-                <Select
-                  value={filters.starting_month}
-                  onValueChange={(value) => handleFilterChange('starting_month', value)}
-                >
-                  <SelectTrigger id="starting-month">
-                    <SelectValue placeholder="Select month" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all_months">All Months</SelectItem>
-                    {monthOptions.map((month) => (
-                      <SelectItem key={month.value} value={month.value}>
-                        {month.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              {/* Dynamic column filters */}
-              {dynamicColumns.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                  {dynamicColumns.map(column => (
-                    <div key={column.id} className="space-y-2">
-                      <Label htmlFor={`dynamic-${column.id}`}>{column.name}</Label>
-                      <Input
-                        id={`dynamic-${column.id}`}
-                        placeholder={`Filter by ${column.name.toLowerCase()}`}
-                        value={dynamicFilters[column.id] || ''}
-                        onChange={(e) => handleDynamicFilterChange(column.id, e.target.value)}
-                      />
-                    </div>
+        {isFiltersOpen && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
+            <div className="space-y-2">
+              <Label htmlFor="domain">Domain</Label>
+              <Input
+                id="domain"
+                value={domain}
+                onChange={(e) => setDomain(e.target.value)}
+                placeholder="e.g., Web Development"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="organization">Organization</Label>
+              <Input
+                id="organization"
+                value={organization}
+                onChange={(e) => setOrganization(e.target.value)}
+                placeholder="e.g., Microsoft"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="program">Program</Label>
+              <Select value={program} onValueChange={setProgram}>
+                <SelectTrigger id="program">
+                  <SelectValue placeholder="All Programs" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all_programs">All Programs</SelectItem>
+                  <SelectItem value="BSc CS">BSc CS</SelectItem>
+                  <SelectItem value="BSc DS">BSc DS</SelectItem>
+                  <SelectItem value="BSc Cyber">BSc Cyber</SelectItem>
+                  <SelectItem value="BCA">BCA</SelectItem>
+                  <SelectItem value="BCA AI/DS">BCA AI/DS</SelectItem>
+                  <SelectItem value="BTech CSE">BTech CSE</SelectItem>
+                  <SelectItem value="BTech FSD">BTech FSD</SelectItem>
+                  <SelectItem value="BTech UI/UX">BTech UI/UX</SelectItem>
+                  <SelectItem value="BTech AI/ML">BTech AI/ML</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="year">Year</Label>
+              <Input
+                id="year"
+                value={year}
+                onChange={(e) => setYear(e.target.value)}
+                placeholder="e.g., 2025"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="semester">Semester</Label>
+              <Select value={semester} onValueChange={setSemester}>
+                <SelectTrigger id="semester">
+                  <SelectValue placeholder="All Semesters" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all_semesters">All Semesters</SelectItem>
+                  <SelectItem value="1">Semester 1</SelectItem>
+                  <SelectItem value="2">Semester 2</SelectItem>
+                  <SelectItem value="3">Semester 3</SelectItem>
+                  <SelectItem value="4">Semester 4</SelectItem>
+                  <SelectItem value="5">Semester 5</SelectItem>
+                  <SelectItem value="6">Semester 6</SelectItem>
+                  <SelectItem value="7">Semester 7</SelectItem>
+                  <SelectItem value="8">Semester 8</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="session">Session</Label>
+              <Input
+                id="session"
+                value={session}
+                onChange={(e) => setSession(e.target.value)}
+                placeholder="e.g., 2024-25"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="month">Starting Month</Label>
+              <Select value={month} onValueChange={setMonth}>
+                <SelectTrigger id="month">
+                  <SelectValue placeholder="All Months" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all_months">All Months</SelectItem>
+                  {availableMonths.map((m) => (
+                    <SelectItem key={m} value={m}>{m}</SelectItem>
                   ))}
-                </div>
-              )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="facultyCoordinator">Faculty Coordinator</Label>
+              <Select value={facultyCoordinator} onValueChange={setFacultyCoordinator}>
+                <SelectTrigger id="facultyCoordinator">
+                  <SelectValue placeholder="All Coordinators" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all_coordinators">All Coordinators</SelectItem>
+                  {availableCoordinators.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             
-            <div className="flex justify-end space-x-2 mt-4">
-              <Button variant="outline" onClick={resetFilters}>
-                Reset
-              </Button>
-              <Button onClick={applyFilters}>
-                Apply Filters
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            <Input
-              className="w-full sm:w-auto sm:flex-1"
-              placeholder="Search by name, roll no, or any field..."
-              value={searchValue}
-              onChange={(e) => handleSearchChange(e.target.value)}
-            />
-            
-            <Select 
-              value={filters.faculty_coordinator} 
-              onValueChange={(value) => {
-                handleFilterChange('faculty_coordinator', value);
-                applyFilters();
-              }}
-            >
-              <SelectTrigger className="w-full sm:w-[200px]">
-                <SelectValue placeholder="Faculty Coordinator" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all_coordinators">All Coordinators</SelectItem>
-                {facultyCoordinatorOptions.map(option => (
-                  <SelectItem key={option} value={option}>{option}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            
-            {/* Month filter for collapsed view */}
-            <Select
-              value={filters.starting_month}
-              onValueChange={(value) => {
-                handleFilterChange('starting_month', value);
-                applyFilters();
-              }}
-            >
-              <SelectTrigger className="w-full sm:w-[150px]">
-                <SelectValue placeholder="Starting Month" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all_months">All Months</SelectItem>
-                {monthOptions.map((month) => (
-                  <SelectItem key={month.value} value={month.value}>
-                    {month.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            
-            <Button variant="outline" onClick={resetFilters} className="shrink-0">
-              Reset
-            </Button>
+            {/* Dynamic columns filters */}
+            {dynamicColumns.map((column) => (
+              <div key={column.id} className="space-y-2">
+                <Label htmlFor={`dynamic-${column.id}`}>{column.name}</Label>
+                <Input
+                  id={`dynamic-${column.id}`}
+                  value={dynamicFilters[column.id] || ''}
+                  onChange={(e) => handleDynamicFilterChange(column.id, e.target.value)}
+                  placeholder={`Filter by ${column.name.toLowerCase()}`}
+                />
+              </div>
+            ))}
           </div>
         )}
-      </CardContent>
+      </div>
     </Card>
   );
 };

@@ -3,13 +3,14 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import Navbar from '@/components/Navbar';
-import ProjectTable from '@/components/ProjectTable';
+import ProjectTable from '@/components/project-table';
 import ProjectFilters from '@/components/ProjectFilters';
 import AddProjectModal from '@/components/AddProjectModal';
 import ImportExcelModal from '@/components/ImportExcelModal';
 import { Faculty, setupDatabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
-import { FilePlus2, Download } from 'lucide-react';
+import { FilePlus2, PlusCircle } from 'lucide-react';
+import Footer from '@/components/footer';
 
 const ProjectPortal = () => {
   const navigate = useNavigate();
@@ -113,7 +114,7 @@ const ProjectPortal = () => {
               onClick={() => setShowAddProjectModal(true)}
               className="flex items-center"
             >
-              <Download className="mr-2 h-4 w-4" />
+              <PlusCircle className="mr-2 h-4 w-4" />
               Add New Project
             </Button>
           </div>
@@ -135,6 +136,7 @@ const ProjectPortal = () => {
         isOpen={showImportExcelModal}
         onClose={() => setShowImportExcelModal(false)}
       />
+
     </div>
   );
 };

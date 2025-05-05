@@ -1,225 +1,199 @@
 
 import { useState } from 'react';
 import * as XLSX from 'xlsx';
-import { useToast } from '@/hooks/use-toast';
-import { addProject } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 
-interface ExcelImportHookProps {
-  facultyCoordinator: string;
-  onClose: () => void;
+interface UseExcelImportProps {
+  tableName: 'projects' | 'internships';
+  minStudents?: number;
+  maxStudents?: number;
 }
 
-export const useExcelImport = ({ facultyCoordinator, onClose }: ExcelImportHookProps) => {
-  const [file, setFile] = useState<File | null>(null);
-  const [isImporting, setIsImporting] = useState(false);
-  const [previewData, setPreviewData] = useState<any[] | null>(null);
-  const { toast } = useToast();
+interface StudentRecord {
+  roll_no: string;
+  name: string;
+  email?: string;
+  program?: string;
+}
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      setFile(selectedFile);
-      
-      // Preview Excel data
+export function useExcelImport({ tableName, minStudents = 1, maxStudents = 4 }: UseExcelImportProps) {
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  const processExcelFile = async (file: File): Promise<any[]> => {
+    return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = (evt) => {
-        if (evt.target?.result) {
-          try {
-            const data = new Uint8Array(evt.target.result as ArrayBuffer);
-            const workbook = XLSX.read(data, { type: 'array' });
-            const firstSheet = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[firstSheet];
-            const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
-            setPreviewData(jsonData.slice(0, 5)); // Preview first 5 rows
-            console.log("Excel preview data:", jsonData.slice(0, 5));
-          } catch (error) {
-            console.error("Error previewing Excel data:", error);
-            toast({
-              title: 'Error Previewing File',
-              description: 'Failed to read the Excel file. Please check the format.',
-              variant: 'destructive',
-            });
-          }
+      
+      reader.onload = (e) => {
+        try {
+          const data = e.target?.result;
+          const workbook = XLSX.read(data, { type: 'binary' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const json = XLSX.utils.sheet_to_json(worksheet, { defval: null });
+          resolve(json);
+        } catch (error) {
+          console.error('Error parsing Excel file:', error);
+          reject(new Error('Failed to parse Excel file. Please check the format.'));
         }
       };
-      reader.readAsArrayBuffer(selectedFile);
+      
+      reader.onerror = () => {
+        reject(new Error('Failed to read Excel file.'));
+      };
+      
+      reader.readAsBinaryString(file);
+    });
+  };
+
+  const importExcelFile = async (file: File) => {
+    setIsImporting(true);
+    setImportProgress(10);
+    setImportError(null);
+    
+    try {
+      // Process the Excel file
+      const records = await processExcelFile(file);
+      setImportProgress(30);
+      
+      if (records.length === 0) {
+        throw new Error('No records found in the Excel file.');
+      }
+      
+      // Define the total operations for progress calculation
+      const totalOperations = records.length;
+      let completedOperations = 0;
+      
+      // Process each record based on the table name
+      for (const record of records) {
+        if (tableName === 'projects') {
+          await importProjectRecord(record);
+        } else if (tableName === 'internships') {
+          await importInternshipRecord(record);
+        }
+        
+        completedOperations++;
+        setImportProgress(30 + Math.floor((completedOperations / totalOperations) * 60));
+      }
+      
+      setImportProgress(100);
+      setTimeout(() => {
+        setIsImporting(false);
+        setImportProgress(0);
+      }, 1500);
+      
+      return { success: true, message: `Successfully imported ${records.length} records.` };
+    } catch (error: any) {
+      console.error('Import error:', error);
+      setImportError(error.message || 'An unexpected error occurred during import.');
+      setIsImporting(false);
+      setImportProgress(0);
+      return { success: false, message: error.message || 'Import failed.' };
     }
   };
 
-  const handleImport = async () => {
-    if (!file) {
-      toast({
-        title: 'No File Selected',
-        description: 'Please select an Excel file to import.',
-        variant: 'destructive',
-      });
-      return;
-    }
+  const importProjectRecord = async (record: any) => {
+    // Extract student data from the record
+    const students: StudentRecord[] = [];
     
-    if (!facultyCoordinator) {
-      toast({
-        title: 'Missing Information',
-        description: 'Faculty coordinator information is required.',
-        variant: 'destructive',
-      });
-      return;
-    }
-    
-    setIsImporting(true);
-    
-    try {
-      const reader = new FileReader();
+    for (let i = 1; i <= maxStudents; i++) {
+      const rollNo = record[`Student ${i} Roll No`];
+      const name = record[`Student ${i} Name`];
       
-      reader.onload = async (evt) => {
-        if (evt.target?.result) {
-          try {
-            const data = new Uint8Array(evt.target.result as ArrayBuffer);
-            const workbook = XLSX.read(data, { type: 'array' });
-            const firstSheet = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[firstSheet];
-            const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' }) as any[];
-            
-            console.log("Full Excel data:", jsonData);
-            
-            if (jsonData.length === 0) {
-              throw new Error('Excel file is empty or has invalid format');
-            }
-            
-            // Import each group
-            let successCount = 0;
-            let errorCount = 0;
-            
-            // Process each row as a separate project/group
-            for (const row of jsonData) {
-              try {
-                console.log("Processing row:", row);
-                
-                // Extract group_no (convert to string if it's a number)
-                const groupNo = String(row['Group No'] || '').trim();
-                
-                if (!groupNo) {
-                  console.warn('Row missing Group No:', row);
-                  errorCount++;
-                  continue;
-                }
-                
-                // Basic project data
-                const projectData = {
-                  group_no: groupNo,
-                  title: String(row['Title'] || ''),
-                  domain: String(row['Domain'] || ''),
-                  faculty_mentor: String(row['Faculty Mentor'] || ''),
-                  industry_mentor: String(row['Industry Mentor'] || ''),
-                  session: String(row['Session'] || ''),
-                  year: String(row['Year'] || ''),
-                  semester: String(row['Semester'] || ''),
-                  faculty_coordinator: facultyCoordinator,
-                  progress_form_url: String(row['Progress Form'] || ''),
-                  presentation_url: String(row['Presentation'] || ''),
-                  report_url: String(row['Report'] || ''),
-                  initial_evaluation: String(row['Initial Evaluation'] || ''),
-                  progress_evaluation: String(row['Progress Evaluation'] || ''),
-                  final_evaluation: String(row['Final Evaluation'] || '')
-                };
-                
-                // Collect student data from the row
-                const students = [];
-                
-                // Process up to 4 students per row
-                for (let i = 1; i <= 4; i++) {
-                  const rollNo = String(row[`Student ${i} Roll No`] || '').trim();
-                  const name = String(row[`Student ${i} Name`] || '').trim();
-                  const email = String(row[`Student ${i} Email`] || '').trim();
-                  const program = String(row[`Student ${i} Program`] || '').trim();
-                  
-                  // Only add student if at least roll number is provided
-                  if (rollNo) {
-                    students.push({
-                      roll_no: rollNo,
-                      name: name,
-                      email: email,
-                      program: program
-                    });
-                  }
-                }
-                
-                console.log(`Importing group ${groupNo} with ${students.length} students:`, { projectData, students });
-                
-                if (students.length === 0) {
-                  console.warn(`Group ${groupNo} has no valid students with roll numbers.`);
-                  errorCount++;
-                  continue;
-                }
-                
-                const result = await addProject(projectData, students);
-                
-                if (result) {
-                  console.log(`Successfully imported group ${groupNo}:`, result);
-                  successCount++;
-                } else {
-                  console.error(`Failed to import group ${groupNo}`);
-                  errorCount++;
-                }
-              } catch (error) {
-                console.error(`Error importing row:`, error);
-                errorCount++;
-              }
-            }
-            
-            // Show results
-            if (successCount > 0) {
-              toast({
-                title: 'Import Successful',
-                description: `Successfully imported ${successCount} groups.${errorCount > 0 ? ` Failed to import ${errorCount} groups.` : ''}`,
-              });
-              onClose();
-              // Refresh the page to show new data
-              window.location.reload();
-            } else {
-              toast({
-                title: 'Import Failed',
-                description: 'Failed to import any groups. Please check the Excel format and try again.',
-                variant: 'destructive',
-              });
-            }
-          } catch (error) {
-            console.error('Excel import error:', error);
-            toast({
-              title: 'Import Error',
-              description: 'An error occurred during import. Please check the Excel format and try again.',
-              variant: 'destructive',
-            });
-          }
-        }
-      };
-      
-      reader.onerror = (error) => {
-        console.error('FileReader error:', error);
-        toast({
-          title: 'File Error',
-          description: 'Failed to read the Excel file.',
-          variant: 'destructive',
+      if (rollNo && name) {
+        students.push({
+          roll_no: String(rollNo),
+          name: String(name),
+          email: record[`Student ${i} Email`] ? String(record[`Student ${i} Email`]) : undefined,
+          program: record[`Student ${i} Program`] ? String(record[`Student ${i} Program`]) : undefined
         });
-      };
+      }
+    }
+    
+    // Check if we have at least the minimum number of students
+    if (students.length < minStudents) {
+      throw new Error(`Each project must have at least ${minStudents} student(s).`);
+    }
+    
+    // Prepare project data
+    const projectDataToInsert = {
+      group_no: String(record['Group No']),
+      title: String(record['Title']),
+      domain: record['Domain'] ? String(record['Domain']) : null,
+      faculty_mentor: record['Faculty Mentor'] ? String(record['Faculty Mentor']) : null,
+      industry_mentor: record['Industry Mentor'] ? String(record['Industry Mentor']) : null,
+      session: record['Session'] ? String(record['Session']) : null,
+      year: record['Year'] ? String(record['Year']) : null,
+      semester: record['Semester'] ? String(record['Semester']) : null,
+      faculty_coordinator: record['Faculty Coordinator'] ? String(record['Faculty Coordinator']) : null,
+      project_category: record['Project Category'] ? String(record['Project Category']) : null
+    };
+    
+    // Insert the project
+    const { data: insertedProject, error: projectError } = await supabase
+      .from('projects')
+      .insert(projectDataToInsert)
+      .select()
+      .single();
       
-      reader.readAsArrayBuffer(file);
-    } catch (error) {
-      console.error('Import error:', error);
-      toast({
-        title: 'Import Error',
-        description: 'An error occurred during import. Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsImporting(false);
+    if (projectError || !insertedProject) {
+      throw projectError || new Error('Failed to insert project');
+    }
+    
+    // Insert the students
+    if (students.length > 0) {
+      const studentsWithGroupId = students.map(student => ({
+        ...student,
+        group_id: insertedProject.id
+      }));
+      
+      const { error: studentsError } = await supabase
+        .from('students')
+        .insert(studentsWithGroupId);
+        
+      if (studentsError) {
+        throw studentsError;
+      }
+    }
+  };
+
+  const importInternshipRecord = async (record: any) => {
+    // Prepare internship data
+    const internshipData = {
+      roll_no: String(record['Roll No']),
+      name: String(record['Name']),
+      email: record['Email'] ? String(record['Email']) : null,
+      phone_no: record['Phone No'] ? String(record['Phone No']) : null,
+      domain: record['Domain'] ? String(record['Domain']) : null,
+      organization_name: record['Organization'] ? String(record['Organization']) : null,
+      position: record['Position'] ? String(record['Position']) : null,
+      stipend: record['Stipend'] ? String(record['Stipend']) : null,
+      starting_date: record['Starting Date'] ? String(record['Starting Date']) : null,
+      ending_date: record['Ending Date'] ? String(record['Ending Date']) : null,
+      session: record['Session'] ? String(record['Session']) : null,
+      year: record['Year'] ? String(record['Year']) : null,
+      semester: record['Semester'] ? String(record['Semester']) : null,
+      program: record['Program'] ? String(record['Program']) : null,
+      faculty_coordinator: record['Faculty Coordinator'] ? String(record['Faculty Coordinator']) : null
+    };
+    
+    // Insert the internship
+    const { error } = await supabase
+      .from('internships')
+      .insert(internshipData);
+      
+    if (error) {
+      throw error;
     }
   };
 
   return {
-    file,
+    importExcelFile,
     isImporting,
-    previewData,
-    handleFileChange,
-    handleImport,
+    importProgress,
+    importError
   };
-};
+}
+
+export default useExcelImport;

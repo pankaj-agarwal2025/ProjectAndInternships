@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
@@ -14,7 +14,7 @@ const ImportFilters: React.FC<ImportFiltersProps> = ({
   minStudents,
   maxStudents,
   onMinStudentsChange,
-  onMaxStudentsChange,
+  onMaxStudentsChange
 }) => {
   return (
     <div className="grid grid-cols-2 gap-4">
